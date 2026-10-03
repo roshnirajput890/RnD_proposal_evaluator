@@ -1,41 +1,137 @@
-/* Global Styles & Reset */
+/*
+  index.css — Global reset + design tokens
+  Brick 4: Analyst-tool aesthetic
+
+  COLOR RATIONALE
+  ───────────────
+  --bg:          #F5F3EE  Warm off-white (not #fff). Reduces glare, gives the page
+                          a slightly aged-document quality appropriate for proposal review.
+  --surface:     #EFEDE7  One step darker than bg — used for inset areas, code blocks,
+                          dropzones. Keeps everything in the same warm register.
+  --surface-mid: #E5E2DA  Two steps — borders, rule lines, subtle dividers.
+  --ink:         #1A1A18  Near-black with a hint of warm brown. Softer than #000,
+                          still high contrast (>9:1 on bg).
+  --ink-2:       #4A4843  Secondary text — muted but still readable (>4.5:1).
+  --ink-3:       #7A7570  Tertiary/hint text — captions, meta.
+  --border:      #C8C4BB  Standard 1px border. Warm grey, never a floating shadow.
+  --border-subtle: #DAD7D0 Lighter variant for nested/internal dividers.
+
+  ACCENT — muted amber #C17A2A
+  ──────────────────────────────
+  One accent only. Used for: primary button bg, active borders, focus rings, success
+  indicators. Not blue/purple. Not a gradient. Warm, deliberate, not loud.
+
+  --accent:       #C17A2A  The action color. ~4.6:1 on --bg, sufficient for large text
+                           and UI controls; white text on it is ~3.2:1 so we pair it
+                           with --ink text on lighter tints.
+  --accent-dim:   #7A4C1A  Hover/active state (darker).
+  --accent-tint:  #F5ECD9  Background tint for accent surfaces (alerts, active states).
+  --accent-tint2: #EDD9B5  Slightly stronger tint.
+
+  STATUS COLORS (functional only, never decorative)
+  --ok-text / --ok-bg:     Muted green — "connected", "ready"
+  --warn-text / --warn-bg: Amber-adjacent — "checking", "warning"
+  --err-text / --err-bg:   Brick red — "offline", "error"
+*/
+
 :root {
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  --bg-color: #f8fafc;
-  --card-bg: #ffffff;
-  --text-main: #0f172a;
-  --text-muted: #64748b;
-  --border-color: #e2e8f0;
-  --primary-color: #2563eb;
-  --primary-hover: #1d4ed8;
-  --status-connected-bg: #ecfdf5;
-  --status-connected-text: #065f46;
-  --status-connected-dot: #10b981;
-  --status-disconnected-bg: #fef2f2;
-  --status-disconnected-text: #991b1b;
-  --status-disconnected-dot: #ef4444;
-  --status-checking-bg: #fffbeb;
-  --status-checking-text: #92400e;
-  --status-checking-dot: #f59e0b;
+  /* ── Palette ── */
+  --bg:           #F5F3EE;
+  --surface:      #EFEDE7;
+  --surface-mid:  #E5E2DA;
+  --ink:          #1A1A18;
+  --ink-2:        #4A4843;
+  --ink-3:        #7A7570;
+  --border:       #C8C4BB;
+  --border-subtle:#DAD7D0;
+
+  /* Accent: muted amber */
+  --accent:       #C17A2A;
+  --accent-dim:   #7A4C1A;
+  --accent-tint:  #F5ECD9;
+  --accent-tint2: #EDD9B5;
+
+  /* Status — functional */
+  --ok-text:      #2C5F3A;
+  --ok-bg:        #E8F2EB;
+  --ok-dot:       #3A8A50;
+  --warn-text:    #7A4C1A;
+  --warn-bg:      #F5ECD9;
+  --warn-dot:     #C17A2A;
+  --err-text:     #7A2020;
+  --err-bg:       #F5E8E8;
+  --err-dot:      #B83030;
+
+  /* ── Type scale ── */
+  --font-sans:    'IBM Plex Sans', system-ui, sans-serif;
+  --font-serif:   'IBM Plex Serif', Georgia, serif;
+  --font-mono:    'IBM Plex Mono', 'Consolas', 'Courier New', monospace;
+
+  /* ── Spacing ── */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+
+  /* ── Geometry — flat, not floaty ── */
+  --radius-sm: 2px;   /* Almost square — inputs, tags, code */
+  --radius:    3px;   /* Buttons, small controls */
+  --radius-md: 4px;   /* Sections — barely perceptible */
+
+  /* Legacy aliases kept so any stray var() refs in App.css still resolve */
+  --bg-color:      var(--bg);
+  --card-bg:       var(--bg);
+  --text-main:     var(--ink);
+  --text-muted:    var(--ink-3);
+  --border-color:  var(--border);
+  --primary-color: var(--accent);
+  --primary-hover: var(--accent-dim);
+
+  --status-connected-bg:    var(--ok-bg);
+  --status-connected-text:  var(--ok-text);
+  --status-connected-dot:   var(--ok-dot);
+  --status-disconnected-bg: var(--err-bg);
+  --status-disconnected-text: var(--err-text);
+  --status-disconnected-dot: var(--err-dot);
+  --status-checking-bg:     var(--warn-bg);
+  --status-checking-text:   var(--warn-text);
+  --status-checking-dot:    var(--warn-dot);
 }
 
-* {
+/* ── Reset ── */
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
 body {
-  font-family: var(--font-family);
-  background-color: var(--bg-color);
-  color: var(--text-main);
+  font-family: var(--font-sans);
+  background-color: var(--bg);
+  color: var(--ink);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Subtle grain texture — the intentional craft detail in the background */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.022'/%3E%3C/svg%3E");
 }
 
 button {
-  font-family: inherit;
+  font-family: var(--font-sans);
   cursor: pointer;
+}
+
+/* ── Global focus ring — amber, not browser default blue ── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
