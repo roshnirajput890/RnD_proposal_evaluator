@@ -120,7 +120,8 @@ export default function Analytics({ evaluationVersion }) {
       {!loading && !error && !isEmpty && data && (() => {
         const { totals, scores, risk_breakdown, score_distribution,
                 monthly_volume, by_model, top_evaluations,
-                recommendation_breakdown } = data
+                recommendation_breakdown, category_avg_scores,
+                reviewer_stats } = data
 
         const completedRate = totals.proposals > 0
           ? Math.round((totals.completed / totals.proposals) * 100) : 0
@@ -279,6 +280,82 @@ export default function Analytics({ evaluationVersion }) {
                 </section>
               )
             })()}
+
+            {/* ── Category average scores ── */}
+            {category_avg_scores && Object.values(category_avg_scores).some(v => v != null) && (
+              <section className="analytics-panel" aria-label="Category average scores">
+                <div className="panel-header">
+                  <span className="panel-title">Average score per dimension</span>
+                  <span className="panel-title-sub">from evaluations with AI scores</span>
+                </div>
+                <div className="panel-body">
+                  {[
+                    { key: 'novelty',   label: 'Novelty',   weight: '25%' },
+                    { key: 'technical', label: 'Technical', weight: '30%' },
+                    { key: 'financial', label: 'Financial', weight: '20%' },
+                    { key: 'impact',    label: 'Impact',    weight: '25%' },
+                  ].map(({ key, label, weight }) => {
+                    const val = category_avg_scores[key]
+                    const pct = val != null ? (val / 5) * 100 : null
+                    return (
+                      <div key={key} className="cat-avg-row">
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--ink-2)' }}>
+                          {label}
+                          <span style={{ color: 'var(--ink-3)', marginLeft: 4 }}>({weight})</span>
+                        </span>
+                        <div className="hbar-track">
+                          {pct != null
+                            ? <div className={`hbar-fill ${val >= 4 ? 'hbar-fill--high' : val >= 3 ? 'hbar-fill--mid' : 'hbar-fill--low'}`}
+                                style={{ width: `${pct}%` }} />
+                            : <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--ink-3)', padding: '0 8px' }}>no data</div>
+                          }
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--ink)', textAlign: 'right' }}>
+                          {val != null ? `${val.toFixed(2)} / 5` : '—'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* ── Reviewer stats ── */}
+            {reviewer_stats && (
+              <section className="analytics-panel" aria-label="Reviewer progress">
+                <div className="panel-header">
+                  <span className="panel-title">Human review progress</span>
+                </div>
+                <div className="panel-body">
+                  <div className="reviewer-split">
+                    <div className="reviewer-split-cell">
+                      <span className="reviewer-split-num" style={{ color: 'var(--ok-text)' }}>
+                        {reviewer_stats.reviewed}
+                      </span>
+                      <span className="reviewer-split-label">Reviewed</span>
+                    </div>
+                    <div className="reviewer-split-cell">
+                      <span className="reviewer-split-num" style={{ color: 'var(--ink-3)' }}>
+                        {reviewer_stats.pending}
+                      </span>
+                      <span className="reviewer-split-label">Pending review</span>
+                    </div>
+                  </div>
+                  {totals.proposals > 0 && (
+                    <div className="hbar-track" style={{ marginTop: 12, height: 8 }}>
+                      <div className="hbar-fill hbar-fill--high"
+                        style={{ width: `${(reviewer_stats.reviewed / totals.proposals) * 100}%` }} />
+                    </div>
+                  )}
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem',
+                    color: 'var(--ink-3)', marginTop: 8 }}>
+                    {totals.proposals > 0
+                      ? `${Math.round((reviewer_stats.reviewed / totals.proposals) * 100)}% of evaluations reviewed`
+                      : 'No evaluations yet'}
+                  </p>
+                </div>
+              </section>
+            )}
 
           </>
         )

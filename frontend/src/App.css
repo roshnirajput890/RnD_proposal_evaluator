@@ -1126,3 +1126,295 @@
 }
 
 .col-actions { width: 110px; text-align: left; }
+
+/* ═══════════════════════════════════════════════════════════
+   BRICK 8: SCORING + REVIEWER CSS
+   All classes used by ScoreBreakdown, ReviewerPanel, and
+   the agent-score display in NewAnalysis.
+═══════════════════════════════════════════════════════════ */
+
+/* Score breakdown panel */
+.score-breakdown-section { border-top: 2px solid var(--border); }
+
+/* Per-dimension bar row */
+.score-dim-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 52px 42px;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.score-dim-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.score-dim-track {
+  height: 7px;
+  background-color: var(--surface-mid);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.score-dim-fill {
+  height: 100%;
+  background-color: var(--accent);
+  border-radius: 2px;
+  transition: width 0.35s ease;
+}
+
+.score-dim-null {
+  background-color: var(--surface-mid);
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--border) 0, var(--border) 3px,
+    transparent 3px, transparent 8px
+  );
+}
+
+.score-dim-val {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.score-dim-weight {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-3);
+  text-align: right;
+}
+
+/* "How is this calculated?" toggle */
+.calc-toggle {
+  background: none;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  margin-top: var(--sp-2);
+  transition: color 0.1s;
+}
+
+.calc-toggle:hover { color: var(--accent); }
+
+.calc-explanation {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
+.calc-explanation p { margin-bottom: var(--sp-2); }
+.calc-explanation p:last-child { margin-bottom: 0; }
+.calc-explanation ul { margin: var(--sp-1) 0 var(--sp-2) var(--sp-4); }
+.calc-explanation li { margin-bottom: var(--sp-1); }
+
+/* Agent score inline tag */
+.agent-score-tag {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-2);
+  background-color: var(--surface-mid);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  margin-left: auto;   /* push to right of the label row */
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.agent-score-justification {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-3);
+  line-height: 1.5;
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Reviewer section */
+.reviewer-section { border-top: 2px solid var(--border); }
+
+.reviewer-dims {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.reviewer-dim-row {
+  display: grid;
+  grid-template-columns: 80px 64px 1fr;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.reviewer-dim-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.reviewer-score-select {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--ink);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 6px;
+  cursor: pointer;
+  transition: border-color 0.1s;
+  width: 100%;
+}
+
+.reviewer-score-select:focus { outline: none; border-color: var(--accent); }
+
+.reviewer-comment-input {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--ink);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  width: 100%;
+  transition: border-color 0.1s;
+}
+
+.reviewer-comment-input:focus    { outline: none; border-color: var(--accent); }
+.reviewer-comment-input:disabled { background-color: var(--surface-mid); color: var(--ink-3); cursor: not-allowed; }
+
+.reviewer-decision-row {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.reviewer-decision-btn {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 16px;
+  cursor: pointer;
+  color: var(--ink-2);
+  transition: background-color 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.reviewer-decision-btn:hover { background-color: var(--surface-mid); }
+
+/* Active states per decision type */
+.reviewer-decision-btn--active[data-dec="approve"] {
+  background-color: var(--ok-bg); border-color: var(--ok-dot); color: var(--ok-text); font-weight: 600;
+}
+.reviewer-decision-btn--active[data-dec="revise"] {
+  background-color: var(--warn-bg); border-color: var(--warn-dot); color: var(--warn-text); font-weight: 600;
+}
+.reviewer-decision-btn--active[data-dec="reject"] {
+  background-color: var(--err-bg); border-color: var(--err-dot); color: var(--err-text); font-weight: 600;
+}
+
+.reviewer-notes-textarea {
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--ink);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3) var(--sp-4);
+  resize: vertical;
+  min-height: 88px;
+  line-height: 1.5;
+  transition: border-color 0.1s;
+}
+
+.reviewer-notes-textarea:focus { outline: none; border-color: var(--accent); }
+
+/* History: score_band pill in table */
+.band-pill {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* History: reviewed indicator */
+.reviewed-tag {
+  font-family: var(--font-mono);
+  font-size: 0.67rem;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+}
+
+.reviewed-tag--done    { color: var(--ok-text);  background: var(--ok-bg);   border-color: var(--ok-dot); }
+.reviewed-tag--pending { color: var(--ink-3);    background: transparent;    border-color: var(--border); }
+
+/* Analytics: category avg score row */
+.cat-avg-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 40px;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+/* Reviewer stats split */
+.reviewer-split {
+  display: flex;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+
+.reviewer-split-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.reviewer-split-num {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.reviewer-split-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+@media (max-width: 640px) {
+  .score-dim-row    { grid-template-columns: 70px 1fr 44px 36px; }
+  .reviewer-dim-row { grid-template-columns: 70px 56px 1fr; }
+}

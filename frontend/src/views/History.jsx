@@ -18,6 +18,127 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { API_BASE_URL } from '../config'
 
+// ── Dimension list (mirrors scoring.py) ───────────────────────────────────────
+const DIMS = [
+  { key: 'novelty_score',   label: 'Novelty'   },
+  { key: 'technical_score', label: 'Technical' },
+  { key: 'financial_score', label: 'Financial' },
+  { key: 'impact_score',    label: 'Impact'    },
+]
+
+// ── Inline reviewer form (used in expanded detail rows) ───────────────────────
+
+function HistoryReviewerForm({ rowId, existing }) {
+  const [overrides, setOverrides]  = useState(() => {
+    const rv = existing?.reviewer_overrides
+    if (!rv) return {}
+    if (typeof rv === 'string') { try { return JSON.parse(rv) } catch { return {} } }
+    return rv || {}
+  })
+  const [decision,  setDecision]   = useState(existing?.reviewer_final_decision || '')
+  const [notes,     setNotes]      = useState(existing?.reviewer_notes || '')
+  const [saving,    setSaving]     = useState(false)
+  const [result,    setResult]     = useState(null)  // 'ok'|'err'
+  const [msg,       setMsg]        = useState('')
+
+  const setDim = (dim, field, val) => {
+    setOverrides(p => ({ ...p, [dim]: { ...(p[dim] || {}), [field]: val } }))
+    setResult(null)
+  }
+
+  const handleSave = async () => {
+    setSaving(true); setResult(null); setMsg('')
+    for (const [dim, ov] of Object.entries(overrides)) {
+      if (ov.score && !ov.comment?.trim()) {
+        setMsg(`Comment required for ${dim}.`); setResult('err'); setSaving(false); return
+      }
+    }
+    const clean = Object.fromEntries(Object.entries(overrides).filter(([, v]) => v.score))
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/evaluations/${rowId}/review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          overrides:      Object.keys(clean).length ? clean : null,
+          final_decision: decision || null,
+          notes:          notes || null,
+        }),
+      })
+      if (res.ok) { setResult('ok'); setMsg('Review saved.') }
+      else { const d = await res.json(); setResult('err'); setMsg(d?.detail || `Error ${res.status}`) }
+    } catch (e) { setResult('err'); setMsg(e.message || 'Network error') }
+    finally { setSaving(false) }
+  }
+
+  const hasExisting = existing?.reviewer_final_decision
+
+  return (
+    <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+        <span className="detail-label" style={{ marginBottom: 0 }}>Reviewer override</span>
+        {hasExisting && (
+          <span className="reviewed-tag reviewed-tag--done">
+            {existing.reviewer_final_decision}
+          </span>
+        )}
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--ink-3)' }}>
+          AI scores are never modified
+        </span>
+      </div>
+
+      <div className="reviewer-dims" style={{ marginBottom: '12px' }}>
+        {DIMS.map(({ key, label }) => {
+          const dim = label.toLowerCase()
+          const ov  = overrides[dim] || {}
+          const aiScore = existing?.[key]
+          return (
+            <div key={key} className="reviewer-dim-row">
+              <span className="reviewer-dim-label">{label}</span>
+              <select className="reviewer-score-select" value={ov.score || ''}
+                onChange={e => setDim(dim, 'score', e.target.value ? parseInt(e.target.value) : null)}>
+                <option value="">—</option>
+                {[1,2,3,4,5].map(n => (
+                  <option key={n} value={n}>{n}{aiScore != null && n === aiScore ? ' (AI)' : ''}</option>
+                ))}
+              </select>
+              <input className="reviewer-comment-input" type="text"
+                placeholder={aiScore != null ? `AI: ${aiScore}/5 — comment required to override` : 'Comment (required if score set)'}
+                value={ov.comment || ''}
+                onChange={e => setDim(dim, 'comment', e.target.value)}
+                disabled={!ov.score} />
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="reviewer-decision-row" style={{ marginBottom: '10px' }}>
+        {['Approve', 'Revise', 'Reject'].map(opt => (
+          <button key={opt}
+            className={`reviewer-decision-btn${decision === opt ? ' reviewer-decision-btn--active' : ''}`}
+            data-dec={opt.toLowerCase()}
+            onClick={() => { setDecision(d => d === opt ? '' : opt); setResult(null) }}
+            type="button">
+            {opt}
+          </button>
+        ))}
+      </div>
+
+      <textarea className="reviewer-notes-textarea" rows={3}
+        placeholder="Reviewer notes…"
+        value={notes} onChange={e => { setNotes(e.target.value); setResult(null) }}
+        style={{ marginBottom: '10px' }} />
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <button className="primary-btn" onClick={handleSave} disabled={saving} type="button"
+          style={{ minWidth: 130 }}>
+          {saving ? <><span className="spinner" aria-hidden="true" />Saving…</> : 'Save review'}
+        </button>
+        {result === 'ok' && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--ok-text)' }}>{msg}</span>}
+        {result === 'err' && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--err-text)' }}>{msg}</span>}
+      </div>
+    </div>
+  )
+}
+
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const STATUS_LABELS = {
@@ -74,17 +195,39 @@ const triggerDownload = (url, filename) => {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-const ScoreBar = ({ value }) => (
-  <div className="score-bar-wrap" title={`${value}/100`}>
-    <div className="score-bar-track">
-      <div
-        className={`score-bar-fill ${value >= 80 ? 'score-high' : value >= 50 ? 'score-mid' : 'score-low'}`}
-        style={{ width: `${value}%` }}
-      />
+// Real score display (overall_score from DB, 1-5 scale)
+const RealScoreDisplay = ({ value }) => {
+  if (value == null) return <span className="mono-val" style={{ color: 'var(--ink-3)' }}>—</span>
+  const pct = (value / 5) * 100
+  return (
+    <div className="score-bar-wrap" title={`${value.toFixed(2)} / 5`}>
+      <div className="score-bar-track">
+        <div
+          className={`score-bar-fill ${value >= 4 ? 'score-high' : value >= 3 ? 'score-mid' : 'score-low'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="score-bar-label">{value.toFixed(1)}</span>
     </div>
-    <span className="score-bar-label">{value}</span>
-  </div>
-)
+  )
+}
+
+// Score band pill
+const BandPill = ({ band }) => {
+  if (!band) return <span className="mono-val" style={{ color: 'var(--ink-3)' }}>—</span>
+  const DOT = {
+    'Recommend':                'dot-connected',
+    'Revise and Resubmit':      'dot-checking',
+    'Not Recommended':          'dot-disconnected',
+    'Insufficient Information': 'dot-checking',
+  }
+  return (
+    <span className="band-pill">
+      <span className={`dot ${DOT[band] || 'dot-checking'}`} aria-hidden="true" />
+      {band}
+    </span>
+  )
+}
 
 const StatusPill = ({ status }) => (
   <span className={`status-pill status-pill--${status}`}>
@@ -209,7 +352,14 @@ export default function History({
   const { query, statusFilter, dateFrom, dateTo, sortKey, sortDir } = filters
 
   const filtered = useMemo(() => {
-    let data = rows.map(r => ({ ...r, _score: deriveScore(r), _risk: deriveRisk(r) }))
+    let data = rows.map(r => ({
+      ...r,
+      // Keep _score/_risk for backward compat with any remaining refs,
+      // but use real DB columns where available
+      _overall: r.overall_score,
+      _band:    r.score_band,
+      _reviewed: !!r.reviewer_final_decision,
+    }))
 
     // Status filter
     if (statusFilter !== 'all')
@@ -404,11 +554,16 @@ export default function History({
                   </button>
                 </th>
                 <th className="col-score">
-                  <button className="th-btn" onClick={() => toggleSort('_score')}>
-                    Score <SortIndicator col="_score" />
+                  <button className="th-btn" onClick={() => toggleSort('overall_score')}>
+                    Score <SortIndicator col="overall_score" />
                   </button>
                 </th>
-                <th className="col-risk">Risk</th>
+                <th className="col-dept" style={{ minWidth: 140 }}>
+                  <button className="th-btn" onClick={() => toggleSort('score_band')}>
+                    Band <SortIndicator col="score_band" />
+                  </button>
+                </th>
+                <th className="col-risk">Reviewed</th>
                 <th className="col-status">Status</th>
                 <th className="col-date">
                   <button className="th-btn" onClick={() => toggleSort('created_at')}>
@@ -422,11 +577,11 @@ export default function History({
 
             <tbody>
               {loading && (
-                <tr><td colSpan="9" className="table-empty">Loading evaluations…</td></tr>
+                <tr><td colSpan="10" className="table-empty">Loading evaluations…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan="9" className="table-empty">
+                  <td colSpan="10" className="table-empty">
                     {rows.length === 0
                       ? 'No evaluations yet. Run an analysis to see results here.'
                       : 'No evaluations match the current filters.'}
@@ -451,8 +606,13 @@ export default function History({
                     </td>
                     <td><span className="dept-tag">{row.model_used || '—'}</span></td>
                     <td><span className="mono-val">{(row.char_count || 0).toLocaleString()}</span></td>
-                    <td><ScoreBar value={row._score} /></td>
-                    <td><RiskTag risk={row._risk} /></td>
+                    <td><RealScoreDisplay value={row.overall_score} /></td>
+                    <td><BandPill band={row.score_band} /></td>
+                    <td>
+                      <span className={`reviewed-tag ${row._reviewed ? 'reviewed-tag--done' : 'reviewed-tag--pending'}`}>
+                        {row._reviewed ? 'Reviewed' : 'Pending'}
+                      </span>
+                    </td>
                     <td><StatusPill status={row.status || 'completed'} /></td>
                     <td><span className="mono-val">{fmtDate(row.created_at)}</span></td>
 
@@ -478,7 +638,7 @@ export default function History({
                   {/* Inline expanded detail row */}
                   {expandedId === row.id && (
                     <tr key={`${row.id}-detail`} className="detail-row">
-                      <td colSpan="9">
+                      <td colSpan="10">
                         <div className="detail-panel">
                           <div className="detail-grid">
                             <div className="detail-cell">
@@ -626,6 +786,9 @@ export default function History({
                               Export JSON
                             </DownloadBtn>
                           </div>
+
+                          {/* ── Inline reviewer form ── */}
+                          <HistoryReviewerForm rowId={row.id} existing={row} />
                         </div>
                       </td>
                     </tr>

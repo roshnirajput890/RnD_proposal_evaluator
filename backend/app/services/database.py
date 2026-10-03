@@ -1,25 +1,39 @@
 """
 database.py — SQLite persistence layer for evaluated proposals.
 
-Uses the Python standard-library sqlite3 only — no new dependencies.
+Schema (evaluations table — full current state including all migrations):
+    id                        TEXT PRIMARY KEY
+    filename                  TEXT NOT NULL
+    title_or_topic            TEXT
+    main_idea                 TEXT
+    main_problem              TEXT
+    proposed_solution         TEXT
+    page_count                INTEGER
+    char_count                INTEGER
+    model_used                TEXT
+    status                    TEXT DEFAULT 'completed'
+    truncated                 INTEGER DEFAULT 0
+    result_json               TEXT
+    created_at                TEXT  (ISO-8601 UTC)
 
-DB file location: backend/data/evaluations.db
-The data/ directory is created automatically on first use.
+    -- Brick 7 coordinator fields --
+    coordinator_summary       TEXT  (JSON-encoded dict)
+    preliminary_recommendation TEXT
+    recommendation_reasoning  TEXT
 
-Schema (evaluations table):
-    id              TEXT PRIMARY KEY   — auto-generated UUID
-    filename        TEXT NOT NULL      — original PDF filename
-    title_or_topic  TEXT               — LLM-extracted title
-    main_idea       TEXT               — LLM main idea summary
-    main_problem    TEXT               — LLM main problem
-    proposed_solution TEXT             — LLM proposed solution
-    page_count      INTEGER
-    char_count      INTEGER
-    model_used      TEXT               — Ollama model name at time of analysis
-    status          TEXT DEFAULT 'completed'
-    truncated       INTEGER DEFAULT 0  — 1 if input was truncated
-    result_json     TEXT               — full JSON blob of the /api/analyze response
-    created_at      TEXT               — ISO-8601 UTC timestamp
+    -- Brick 8 AI score fields --
+    novelty_score             INTEGER  (1-5 or NULL)
+    technical_score           INTEGER
+    financial_score           INTEGER
+    impact_score              INTEGER
+    overall_score             REAL     (weighted average or NULL)
+    score_band                TEXT
+
+    -- Brick 8 reviewer fields --
+    reviewer_overrides        TEXT  (JSON-encoded dict)
+    reviewer_final_decision   TEXT  (Approve | Revise | Reject)
+    reviewer_notes            TEXT
+    reviewer_updated_at       TEXT  (ISO-8601 UTC)
 """
 import sqlite3
 import json
@@ -28,10 +42,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-
-# ── DB file path ───────────────────────────────────────────────────────────────
-
-BASE_DIR = Path(__file__).resolve().parent.parent.parent   # backend/
+# ── DB path ────────────────────────────────────────────────────────────────────
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH  = DATA_DIR / "evaluations.db"
 
@@ -62,10 +74,6 @@ CREATE INDEX IF NOT EXISTS idx_evaluations_created_at
 # ── Lifecycle ──────────────────────────────────────────────────────────────────
 
 def init_db() -> None:
-    """
-    Create the data/ directory and evaluations table if they don't exist.
-    Safe to call multiple times (CREATE IF NOT EXISTS).
-    """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     with _connect() as conn:
         conn.execute(_CREATE_TABLE)
@@ -75,8 +83,8 @@ def init_db() -> None:
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row          # access columns by name
-    conn.execute("PRAGMA journal_mode=WAL") # concurrent read-write safety
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
@@ -85,23 +93,23 @@ def _connect() -> sqlite3.Connection:
 def save_evaluation(
     *,
     filename:          str,
-    analysis:          Dict[str, Any],   # the analysis sub-dict from /api/analyze
+    analysis:          Dict[str, Any],
     page_count:        int,
     char_count:        int,
     model_used:        str,
-    full_result:       Dict[str, Any],   # complete /api/analyze response
-    # ── Coordinator fields (optional — absent on older saves) ──────────────
+    full_result:       Dict[str, Any],
+    # Brick 7
     coordinator_summary:         Optional[Dict[str, Any]] = None,
     preliminary_recommendation:  Optional[str] = None,
     recommendation_reasoning:    Optional[str] = None,
+    # Brick 8 — AI scores
+    novelty_score:    Optional[int]   = None,
+    technical_score:  Optional[int]   = None,
+    financial_score:  Optional[int]   = None,
+    impact_score:     Optional[int]   = None,
+    overall_score:    Optional[float] = None,
+    score_band:       Optional[str]   = None,
 ) -> str:
-    """
-    Insert one evaluation record and return its generated UUID.
-
-    full_result is stored as a JSON blob so the complete response can be
-    retrieved later without re-running the model.
-    Coordinator fields are stored as JSON (coordinator_summary) or plain text.
-    """
     record_id  = str(uuid.uuid4())
     created_at = datetime.now(timezone.utc).isoformat()
     truncated  = 1 if analysis.get("truncated") else 0
@@ -114,30 +122,32 @@ def save_evaluation(
     with _connect() as conn:
         conn.execute(
             """
-            INSERT INTO evaluations
-                (id, filename, title_or_topic, main_idea, main_problem,
-                 proposed_solution, page_count, char_count, model_used,
-                 status, truncated, result_json, created_at,
-                 coordinator_summary, preliminary_recommendation,
-                 recommendation_reasoning)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?)
+            INSERT INTO evaluations (
+                id, filename, title_or_topic, main_idea, main_problem,
+                proposed_solution, page_count, char_count, model_used,
+                status, truncated, result_json, created_at,
+                coordinator_summary, preliminary_recommendation, recommendation_reasoning,
+                novelty_score, technical_score, financial_score, impact_score,
+                overall_score, score_band
+            ) VALUES (
+                ?,?,?,?,?,?,?,?,?,'completed',?,?,?,
+                ?,?,?,
+                ?,?,?,?,?,?
+            )
             """,
             (
-                record_id,
-                filename,
+                record_id, filename,
                 analysis.get("title_or_topic", ""),
                 analysis.get("main_idea_summary", ""),
                 analysis.get("main_problem", ""),
                 analysis.get("proposed_solution", ""),
-                page_count,
-                char_count,
-                model_used,
+                page_count, char_count, model_used,
                 truncated,
                 json.dumps(full_result, ensure_ascii=False),
                 created_at,
-                coord_json,
-                preliminary_recommendation,
-                recommendation_reasoning,
+                coord_json, preliminary_recommendation, recommendation_reasoning,
+                novelty_score, technical_score, financial_score, impact_score,
+                overall_score, score_band,
             ),
         )
         conn.commit()
@@ -145,28 +155,62 @@ def save_evaluation(
     return record_id
 
 
+def save_reviewer_override(
+    record_id: str,
+    *,
+    reviewer_overrides:      Optional[Dict[str, Any]],
+    reviewer_final_decision: Optional[str],
+    reviewer_notes:          Optional[str],
+) -> bool:
+    """
+    Update only the reviewer fields for an existing evaluation.
+    AI scores are never touched.
+    Returns True if a row was updated, False if record not found.
+    """
+    updated_at = datetime.now(timezone.utc).isoformat()
+    overrides_json = (
+        json.dumps(reviewer_overrides, ensure_ascii=False)
+        if reviewer_overrides else None
+    )
+
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            UPDATE evaluations
+            SET reviewer_overrides      = ?,
+                reviewer_final_decision = ?,
+                reviewer_notes          = ?,
+                reviewer_updated_at     = ?
+            WHERE id = ?
+            """,
+            (overrides_json, reviewer_final_decision,
+             reviewer_notes, updated_at, record_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
 # ── Read ───────────────────────────────────────────────────────────────────────
 
+# All columns the SELECT statements should return
+_ALL_COLS = """
+    id, filename, title_or_topic, main_idea, main_problem,
+    proposed_solution, page_count, char_count, model_used,
+    status, truncated, result_json, created_at,
+    coordinator_summary, preliminary_recommendation, recommendation_reasoning,
+    novelty_score, technical_score, financial_score, impact_score,
+    overall_score, score_band,
+    reviewer_overrides, reviewer_final_decision, reviewer_notes,
+    reviewer_updated_at
+"""
+
+
 def get_evaluations(limit: int = 200) -> List[Dict[str, Any]]:
-    """
-    Return up to `limit` evaluation records, newest first.
-    result_json is parsed back to a dict.
-    """
     with _connect() as conn:
         rows = conn.execute(
-            """
-            SELECT id, filename, title_or_topic, main_idea, main_problem,
-                   proposed_solution, page_count, char_count, model_used,
-                   status, truncated, result_json, created_at,
-                   coordinator_summary, preliminary_recommendation,
-                   recommendation_reasoning
-            FROM evaluations
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
+            f"SELECT {_ALL_COLS} FROM evaluations ORDER BY created_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
-
     return [_row_to_dict(r) for r in rows]
 
 
@@ -180,38 +224,28 @@ def get_evaluation_by_id(record_id: str) -> Optional[Dict[str, Any]]:
 
 def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
     d = dict(row)
-    # Parse result_json back to a Python dict so callers don't have to
-    if d.get("result_json"):
-        try:
-            d["result_json"] = json.loads(d["result_json"])
-        except (json.JSONDecodeError, TypeError):
-            pass   # leave as string if unparseable
-    # Parse coordinator_summary back to a dict
-    if d.get("coordinator_summary"):
-        try:
-            d["coordinator_summary"] = json.loads(d["coordinator_summary"])
-        except (json.JSONDecodeError, TypeError):
-            pass
+
+    # Parse JSON blobs back to dicts
+    for key in ("result_json", "coordinator_summary", "reviewer_overrides"):
+        if d.get(key):
+            try:
+                d[key] = json.loads(d[key])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
     d["truncated"] = bool(d.get("truncated", 0))
     return d
 
 
-# ── Analytics helpers ──────────────────────────────────────────────────────────
+# ── Analytics ──────────────────────────────────────────────────────────────────
 
 def compute_analytics() -> Dict[str, Any]:
-    """
-    Compute aggregate statistics directly from the SQLite table.
-    Returns a structure matching what the frontend Analytics view expects.
-    All computation in SQL where possible; Python used only for derived values.
-    """
     with _connect() as conn:
 
-        # ── Totals ──
         totals_row = conn.execute(
             """
-            SELECT
-                COUNT(*)                                      AS proposals,
-                SUM(CASE WHEN status='completed' THEN 1 END)  AS completed
+            SELECT COUNT(*) AS proposals,
+                   SUM(CASE WHEN status='completed' THEN 1 END) AS completed
             FROM evaluations
             """
         ).fetchone()
@@ -222,181 +256,169 @@ def compute_analytics() -> Dict[str, Any]:
         if proposals == 0:
             return _empty_analytics()
 
-        # ── Score statistics ──
-        # We derive a simple overall score from the model output quality proxy:
-        # presence of a non-empty title + idea + problem + solution each give 25 pts.
-        # Stored as computed column via CASE expressions.
+        # ── Real overall scores from the DB ────────────────────────────────────
         score_rows = conn.execute(
-            """
-            SELECT
-                (CASE WHEN title_or_topic    != '' AND title_or_topic    IS NOT NULL THEN 25 ELSE 0 END +
-                 CASE WHEN main_idea         != '' AND main_idea         IS NOT NULL THEN 25 ELSE 0 END +
-                 CASE WHEN main_problem      != '' AND main_problem      IS NOT NULL THEN 25 ELSE 0 END +
-                 CASE WHEN proposed_solution != '' AND proposed_solution IS NOT NULL THEN 25 ELSE 0 END
-                ) AS score
-            FROM evaluations
-            """
+            "SELECT overall_score, score_band FROM evaluations"
         ).fetchall()
 
-        scores = [r["score"] for r in score_rows]
-        avg_score = round(sum(scores) / len(scores)) if scores else 0
-        max_score = max(scores) if scores else 0
-        min_score = min(scores) if scores else 0
+        real_scores = [r["overall_score"] for r in score_rows if r["overall_score"] is not None]
+        avg_score   = round(sum(real_scores) / len(real_scores), 2) if real_scores else 0
+        max_score   = max(real_scores) if real_scores else 0
+        min_score   = min(real_scores) if real_scores else 0
 
-        # ── Score distribution ──
-        def _band(s: int) -> str:
-            if s >= 90: return "90-100"
-            if s >= 80: return "80-89"
-            if s >= 70: return "70-79"
-            if s >= 60: return "60-69"
-            return "50-59"
-
-        band_counts: Dict[str, int] = {
-            "90-100": 0, "80-89": 0, "70-79": 0, "60-69": 0, "50-59": 0
-        }
-        for s in scores:
-            band_counts[_band(s)] += 1
+        # ── Score band distribution (real score_band column) ──────────────────
+        band_labels = ["Recommend", "Revise and Resubmit", "Not Recommended",
+                       "Insufficient Information", "Not scored"]
+        band_counts: Dict[str, int] = {b: 0 for b in band_labels}
+        for r in score_rows:
+            b = r["score_band"] or "Not scored"
+            if b not in band_counts:
+                b = "Not scored"
+            band_counts[b] += 1
 
         score_distribution = [
-            {"label": k, "count": v} for k, v in band_counts.items()
+            {"label": k, "count": v}
+            for k, v in band_counts.items()
+            if v > 0
         ]
 
-        # ── Truncation as rough risk proxy ──
-        # truncated=1 → high risk (incomplete input)
-        # score < 75  → medium risk
-        # else        → low risk
-        risk_rows = conn.execute(
+        # ── Per-category avg scores ────────────────────────────────────────────
+        cat_row = conn.execute(
             """
-            SELECT
-                truncated,
-                (CASE WHEN title_or_topic    != '' AND title_or_topic    IS NOT NULL THEN 25 ELSE 0 END +
-                 CASE WHEN main_idea         != '' AND main_idea         IS NOT NULL THEN 25 ELSE 0 END +
-                 CASE WHEN main_problem      != '' AND main_problem      IS NOT NULL THEN 25 ELSE 0 END +
-                 CASE WHEN proposed_solution != '' AND proposed_solution IS NOT NULL THEN 25 ELSE 0 END
-                ) AS score
+            SELECT AVG(novelty_score)   AS avg_novelty,
+                   AVG(technical_score) AS avg_technical,
+                   AVG(financial_score) AS avg_financial,
+                   AVG(impact_score)    AS avg_impact
             FROM evaluations
+            WHERE novelty_score IS NOT NULL
+               OR technical_score IS NOT NULL
+               OR financial_score IS NOT NULL
+               OR impact_score IS NOT NULL
             """
+        ).fetchone()
+
+        def _fmt_avg(v):
+            return round(v, 2) if v is not None else None
+
+        category_avg_scores = {
+            "novelty":   _fmt_avg(cat_row["avg_novelty"]),
+            "technical": _fmt_avg(cat_row["avg_technical"]),
+            "financial": _fmt_avg(cat_row["avg_financial"]),
+            "impact":    _fmt_avg(cat_row["avg_impact"]),
+        }
+
+        # ── Risk proxy (unchanged: uses truncated + overall_score) ─────────────
+        risk_rows = conn.execute(
+            "SELECT truncated, overall_score FROM evaluations"
         ).fetchall()
 
         risk_breakdown = {"low": 0, "medium": 0, "high": 0}
         for r in risk_rows:
             if r["truncated"]:
                 risk_breakdown["high"] += 1
-            elif r["score"] < 75:
+            elif (r["overall_score"] or 0) < 3.0:
                 risk_breakdown["medium"] += 1
             else:
                 risk_breakdown["low"] += 1
 
-        # ── Monthly volume ──
+        # ── Monthly volume ─────────────────────────────────────────────────────
         month_rows = conn.execute(
             """
-            SELECT
-                SUBSTR(created_at, 1, 7) AS ym,
-                COUNT(*)                  AS count
-            FROM evaluations
-            GROUP BY ym
-            ORDER BY ym ASC
-            LIMIT 12
+            SELECT SUBSTR(created_at,1,7) AS ym, COUNT(*) AS count
+            FROM evaluations GROUP BY ym ORDER BY ym ASC LIMIT 12
             """
         ).fetchall()
-
         monthly_volume = [
             {"month": _fmt_month(r["ym"]), "count": r["count"]}
             for r in month_rows
         ]
 
-        # ── By model ──
+        # ── By model ───────────────────────────────────────────────────────────
         model_rows = conn.execute(
             """
             SELECT model_used, COUNT(*) AS count
-            FROM evaluations
-            GROUP BY model_used
-            ORDER BY count DESC
+            FROM evaluations GROUP BY model_used ORDER BY count DESC
             """
         ).fetchall()
-
         by_model = [
             {"model": r["model_used"] or "unknown", "count": r["count"]}
             for r in model_rows
         ]
 
-        # ── Top 5 most recent ──
+        # ── Top 5 by overall_score ─────────────────────────────────────────────
         top_rows = conn.execute(
             """
             SELECT id, filename, title_or_topic, created_at,
-                   (CASE WHEN title_or_topic    != '' THEN 25 ELSE 0 END +
-                    CASE WHEN main_idea         != '' THEN 25 ELSE 0 END +
-                    CASE WHEN main_problem      != '' THEN 25 ELSE 0 END +
-                    CASE WHEN proposed_solution != '' THEN 25 ELSE 0 END
-                   ) AS score
+                   overall_score AS score, score_band
             FROM evaluations
-            ORDER BY score DESC, created_at DESC
+            ORDER BY overall_score DESC NULLS LAST, created_at DESC
             LIMIT 5
             """
         ).fetchall()
-
         top_evaluations = [dict(r) for r in top_rows]
 
-        # ── Recommendation breakdown ──
+        # ── Recommendation breakdown (real score_band) ─────────────────────────
         rec_rows = conn.execute(
             """
-            SELECT
-                COALESCE(preliminary_recommendation, 'Not evaluated') AS rec,
-                COUNT(*) AS count
-            FROM evaluations
-            GROUP BY preliminary_recommendation
-            ORDER BY count DESC
+            SELECT COALESCE(score_band, 'Not scored') AS rec, COUNT(*) AS count
+            FROM evaluations GROUP BY score_band ORDER BY count DESC
             """
         ).fetchall()
-
         recommendation_breakdown = [
             {"recommendation": r["rec"], "count": r["count"]}
             for r in rec_rows
         ]
 
+        # ── Reviewer stats ─────────────────────────────────────────────────────
+        reviewer_row = conn.execute(
+            """
+            SELECT
+                SUM(CASE WHEN reviewer_final_decision IS NOT NULL THEN 1 ELSE 0 END) AS reviewed,
+                SUM(CASE WHEN reviewer_final_decision IS NULL     THEN 1 ELSE 0 END) AS pending
+            FROM evaluations
+            """
+        ).fetchone()
+        reviewer_stats = {
+            "reviewed": reviewer_row["reviewed"] or 0,
+            "pending":  reviewer_row["pending"]  or 0,
+        }
+
     return {
-        "totals": {
-            "proposals":   proposals,
-            "completed":   completed,
-        },
+        "totals":                 {"proposals": proposals, "completed": completed},
         "scores": {
             "avg_overall": avg_score,
             "highest":     max_score,
             "lowest":      min_score,
         },
-        "risk_breakdown":          risk_breakdown,
-        "score_distribution":      score_distribution,
-        "monthly_volume":          monthly_volume,
-        "by_model":                by_model,
-        "top_evaluations":         top_evaluations,
+        "category_avg_scores":    category_avg_scores,
+        "risk_breakdown":         risk_breakdown,
+        "score_distribution":     score_distribution,
+        "monthly_volume":         monthly_volume,
+        "by_model":               by_model,
+        "top_evaluations":        top_evaluations,
         "recommendation_breakdown": recommendation_breakdown,
+        "reviewer_stats":         reviewer_stats,
     }
 
 
 def _empty_analytics() -> Dict[str, Any]:
-    """Return a zeroed-out analytics structure when the table is empty."""
     return {
-        "totals": {"proposals": 0, "completed": 0},
-        "scores": {"avg_overall": 0, "highest": 0, "lowest": 0},
-        "risk_breakdown":     {"low": 0, "medium": 0, "high": 0},
-        "score_distribution": [
-            {"label": "90-100", "count": 0},
-            {"label": "80-89",  "count": 0},
-            {"label": "70-79",  "count": 0},
-            {"label": "60-69",  "count": 0},
-            {"label": "50-59",  "count": 0},
-        ],
-        "monthly_volume":           [],
-        "by_model":                 [],
-        "top_evaluations":          [],
+        "totals":               {"proposals": 0, "completed": 0},
+        "scores":               {"avg_overall": 0, "highest": 0, "lowest": 0},
+        "category_avg_scores":  {"novelty": None, "technical": None,
+                                 "financial": None, "impact": None},
+        "risk_breakdown":       {"low": 0, "medium": 0, "high": 0},
+        "score_distribution":   [],
+        "monthly_volume":       [],
+        "by_model":             [],
+        "top_evaluations":      [],
         "recommendation_breakdown": [],
+        "reviewer_stats":       {"reviewed": 0, "pending": 0},
     }
 
 
 def _fmt_month(ym: str) -> str:
-    """Convert '2024-11' to 'Nov 2024'."""
     try:
-        dt = datetime.strptime(ym, "%Y-%m")
-        return dt.strftime("%b %Y")
+        return datetime.strptime(ym, "%Y-%m").strftime("%b %Y")
     except ValueError:
         return ym

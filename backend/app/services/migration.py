@@ -42,20 +42,48 @@ def run_migrations() -> None:
     """
     Apply all pending schema migrations to the evaluations table.
 
-    Current migrations:
-        coordinator_summary          TEXT   — JSON-encoded coordinator result dict
-        preliminary_recommendation   TEXT   — "Recommend" | "Revise and Resubmit"
-                                              | "Not Recommended"
-                                              | "Insufficient Information"
-        recommendation_reasoning     TEXT   — coordinator's explanation paragraph
+    Brick 7 migrations:
+        coordinator_summary, preliminary_recommendation, recommendation_reasoning
+
+    Brick 8 migrations:
+        novelty_score, technical_score, financial_score, impact_score
+        overall_score, score_band
+        reviewer_overrides, reviewer_final_decision, reviewer_notes,
+        reviewer_updated_at
     """
     with _connect() as conn:
+        # ── Brick 7 ───────────────────────────────────────────────────────────
         _add_column_if_missing(conn, "evaluations", "coordinator_summary",
                                "TEXT DEFAULT NULL")
         _add_column_if_missing(conn, "evaluations", "preliminary_recommendation",
                                "TEXT DEFAULT NULL")
         _add_column_if_missing(conn, "evaluations", "recommendation_reasoning",
                                "TEXT DEFAULT NULL")
+
+        # ── Brick 8: AI score fields ──────────────────────────────────────────
+        _add_column_if_missing(conn, "evaluations", "novelty_score",
+                               "INTEGER DEFAULT NULL")
+        _add_column_if_missing(conn, "evaluations", "technical_score",
+                               "INTEGER DEFAULT NULL")
+        _add_column_if_missing(conn, "evaluations", "financial_score",
+                               "INTEGER DEFAULT NULL")
+        _add_column_if_missing(conn, "evaluations", "impact_score",
+                               "INTEGER DEFAULT NULL")
+        _add_column_if_missing(conn, "evaluations", "overall_score",
+                               "REAL DEFAULT NULL")
+        _add_column_if_missing(conn, "evaluations", "score_band",
+                               "TEXT DEFAULT NULL")
+
+        # ── Brick 8: reviewer fields ──────────────────────────────────────────
+        _add_column_if_missing(conn, "evaluations", "reviewer_overrides",
+                               "TEXT DEFAULT NULL")        # JSON-encoded dict
+        _add_column_if_missing(conn, "evaluations", "reviewer_final_decision",
+                               "TEXT DEFAULT NULL")        # Approve | Revise | Reject
+        _add_column_if_missing(conn, "evaluations", "reviewer_notes",
+                               "TEXT DEFAULT NULL")
+        _add_column_if_missing(conn, "evaluations", "reviewer_updated_at",
+                               "TEXT DEFAULT NULL")        # ISO-8601 UTC timestamp
+
         conn.commit()
 
     logger.info("run_migrations() complete")

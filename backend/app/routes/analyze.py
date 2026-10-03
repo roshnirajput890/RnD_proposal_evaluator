@@ -75,16 +75,16 @@ async def analyze_proposal_pdf(file: UploadFile = File(None)):
             filename=file.filename,
         )
 
-        # Step 4: Merge document metadata into response
+        # Step 4: Merge document metadata + scoring into response
+        scoring = pipeline_result.get("scoring", {})
         return {
             "filename":   file.filename,
             "page_count": extraction["page_count"],
             "char_count": extraction["char_count"],
             "pages":      extraction["pages"],
             "full_text":  extraction["full_text"],
-            # analysis sub-dict (general_analysis result)
-            "analysis":   pipeline_result["analysis"],
-            # coordinator synthesis (None if coordinator failed)
+            "analysis":          pipeline_result["analysis"],
+            "scoring":           scoring,
             "coordinator":       pipeline_result.get("coordinator"),
             "coordinator_error": pipeline_result.get("coordinator_error"),
             "_agent_statuses":   pipeline_result.get("_agent_statuses", {}),
@@ -136,6 +136,7 @@ def analyze_extracted_text(request: TextAnalysisRequest):
         return {
             "filename":          request.filename,
             "analysis":          pipeline_result["analysis"],
+            "scoring":           pipeline_result.get("scoring", {}),
             "coordinator":       pipeline_result.get("coordinator"),
             "coordinator_error": pipeline_result.get("coordinator_error"),
             "_agent_statuses":   pipeline_result.get("_agent_statuses", {}),
