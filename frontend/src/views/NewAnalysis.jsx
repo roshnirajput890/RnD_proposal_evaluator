@@ -500,7 +500,17 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
     const phaseTimer = setTimeout(() => setAnalysisPhase('analyzing'), 1000)
 
     try {
-      const res  = await fetch(`${API_BASE_URL}/api/analyze`, { method: 'POST', body: form })
+      // Fetch with 500s timeout to allow LLM processing up to ~450s (backend default 180s + buffer)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 500000) // 500 seconds
+      
+      const res  = await fetch(`${API_BASE_URL}/api/analyze`, { 
+        method: 'POST', 
+        body: form,
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+      
       const data = await res.json()
       if (!res.ok) {
         const msg = data?.detail || `Server error ${res.status}`
@@ -539,7 +549,9 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
 
       setAnalysisResult(data)
     } catch (err) {
-      const msg = err.message || 'Unexpected error.'
+      const msg = err.name === 'AbortError' 
+        ? 'Analysis request timed out after 500 seconds. The local LLM may be too slow or not responding.'
+        : (err.message || 'Unexpected error.')
       setIsOllamaError(isOllamaMsg(msg)); setAnalyzeError(msg)
     } finally {
       clearTimeout(phaseTimer); setIsAnalyzing(false); setAnalysisPhase('')

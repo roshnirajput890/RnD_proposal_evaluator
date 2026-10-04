@@ -109,6 +109,10 @@ def save_evaluation(
     impact_score:     Optional[int]   = None,
     overall_score:    Optional[float] = None,
     score_band:       Optional[str]   = None,
+    # Brick 9 — novelty search fields
+    novelty_search_queries:  Optional[list]  = None,   # list[str]
+    retrieved_papers:        Optional[list]  = None,   # list[dict]
+    external_evidence_used:  Optional[bool]  = None,
 ) -> str:
     record_id  = str(uuid.uuid4())
     created_at = datetime.now(timezone.utc).isoformat()
@@ -117,6 +121,19 @@ def save_evaluation(
     coord_json = (
         json.dumps(coordinator_summary, ensure_ascii=False)
         if coordinator_summary else None
+    )
+
+    novelty_queries_json = (
+        json.dumps(novelty_search_queries, ensure_ascii=False)
+        if novelty_search_queries else None
+    )
+    retrieved_papers_json = (
+        json.dumps(retrieved_papers, ensure_ascii=False)
+        if retrieved_papers else None
+    )
+    external_evidence_int = (
+        int(external_evidence_used)
+        if external_evidence_used is not None else None
     )
 
     with _connect() as conn:
@@ -128,11 +145,13 @@ def save_evaluation(
                 status, truncated, result_json, created_at,
                 coordinator_summary, preliminary_recommendation, recommendation_reasoning,
                 novelty_score, technical_score, financial_score, impact_score,
-                overall_score, score_band
+                overall_score, score_band,
+                novelty_search_queries, retrieved_papers, external_evidence_used
             ) VALUES (
                 ?,?,?,?,?,?,?,?,?,'completed',?,?,?,
                 ?,?,?,
-                ?,?,?,?,?,?
+                ?,?,?,?,?,?,
+                ?,?,?
             )
             """,
             (
@@ -148,6 +167,7 @@ def save_evaluation(
                 coord_json, preliminary_recommendation, recommendation_reasoning,
                 novelty_score, technical_score, financial_score, impact_score,
                 overall_score, score_band,
+                novelty_queries_json, retrieved_papers_json, external_evidence_int,
             ),
         )
         conn.commit()
@@ -201,7 +221,8 @@ _ALL_COLS = """
     novelty_score, technical_score, financial_score, impact_score,
     overall_score, score_band,
     reviewer_overrides, reviewer_final_decision, reviewer_notes,
-    reviewer_updated_at
+    reviewer_updated_at,
+    novelty_search_queries, retrieved_papers, external_evidence_used
 """
 
 
@@ -225,8 +246,9 @@ def get_evaluation_by_id(record_id: str) -> Optional[Dict[str, Any]]:
 def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
     d = dict(row)
 
-    # Parse JSON blobs back to dicts
-    for key in ("result_json", "coordinator_summary", "reviewer_overrides"):
+    # Parse JSON blobs back to Python objects
+    for key in ("result_json", "coordinator_summary", "reviewer_overrides",
+                "novelty_search_queries", "retrieved_papers"):
         if d.get(key):
             try:
                 d[key] = json.loads(d[key])
@@ -234,6 +256,11 @@ def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
                 pass
 
     d["truncated"] = bool(d.get("truncated", 0))
+
+    # Convert external_evidence_used integer → bool (None stays None)
+    eeu = d.get("external_evidence_used")
+    d["external_evidence_used"] = bool(eeu) if eeu is not None else None
+
     return d
 
 

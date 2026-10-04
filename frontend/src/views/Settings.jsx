@@ -11,13 +11,14 @@ import { useState, useEffect } from 'react'
 import { API_BASE_URL } from '../config'
 
 const AVAILABLE_MODELS = [
-  'qwen3:4b',
-  'qwen3:8b',
-  'llama3.2:3b',
-  'llama3.1:8b',
-  'mistral:7b',
-  'phi3:mini',
-  'gemma3:4b',
+  { value: 'gemma3:4b',   label: 'gemma3:4b  (recommended — fast, no thinking overhead)' },
+  { value: 'qwen3:4b',    label: 'qwen3:4b   (slow — forced thinking mode, ~20 s+)' },
+  { value: 'qwen3:8b',    label: 'qwen3:8b' },
+  { value: 'llama3.2:3b', label: 'llama3.2:3b' },
+  { value: 'llama3.1:8b', label: 'llama3.1:8b' },
+  { value: 'mistral:7b',  label: 'mistral:7b' },
+  { value: 'phi3:mini',   label: 'phi3:mini' },
+  { value: 'gemma3:12b',  label: 'gemma3:12b' },
 ]
 
 const SYSTEM_PROMPT_PREVIEW = `You are an expert AI R&D proposal evaluation assistant.
@@ -45,7 +46,7 @@ export default function Settings({ llmHealth, llmChecking, onRefreshLlm, session
     // If App already holds a config from a previous visit, use it immediately
     sessionConfig ?? {
       ollamaBaseUrl:  'http://localhost:11434',
-      model:          'qwen3:4b',
+      model:          'gemma3:4b',
       temperature:    '0.1',
       requestTimeout: '180',
       maxInputChars:  '40000',
@@ -60,7 +61,7 @@ export default function Settings({ llmHealth, llmChecking, onRefreshLlm, session
       .then(data => {
         const loaded = {
           ollamaBaseUrl:  data.ollama_base_url  ?? 'http://localhost:11434',
-          model:          data.model            ?? 'qwen3:4b',
+          model:          data.model            ?? 'gemma3:4b',
           temperature:    String(data.temperature    ?? '0.1'),
           requestTimeout: String(data.request_timeout ?? '180'),
           maxInputChars:  String(data.max_input_chars  ?? '40000'),
@@ -124,7 +125,7 @@ export default function Settings({ llmHealth, llmChecking, onRefreshLlm, session
       const data = await res.json()
       const reloaded = {
         ollamaBaseUrl:  data.ollama_base_url  ?? 'http://localhost:11434',
-        model:          data.model            ?? 'qwen3:4b',
+        model:          data.model            ?? 'gemma3:4b',
         temperature:    String(data.temperature    ?? '0.1'),
         requestTimeout: String(data.request_timeout ?? '180'),
         maxInputChars:  String(data.max_input_chars  ?? '40000'),
@@ -260,7 +261,7 @@ export default function Settings({ llmHealth, llmChecking, onRefreshLlm, session
                     onChange={e => set('model', e.target.value)}
                   >
                     {AVAILABLE_MODELS.map(m => (
-                      <option key={m} value={m}>{m}</option>
+                      <option key={m.value} value={m.value}>{m.label}</option>
                     ))}
                   </select>
                   <span className="field-hint">

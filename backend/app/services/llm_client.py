@@ -161,6 +161,9 @@ def call_llm_json(
     Returns:
         dict: Parsed JSON object, or a structured error dict if both attempts fail.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     json_directive = (
         "Respond with ONLY valid JSON. No explanation, no markdown code fences, "
         "no extra text before or after."
@@ -183,8 +186,14 @@ def call_llm_json(
         if isinstance(parsed_json, dict):
             return parsed_json
         return {"result": parsed_json}
-    except json.JSONDecodeError:
-        pass
+    except json.JSONDecodeError as first_err:
+        # Log the raw text that failed to parse
+        logger.warning(
+            "First JSON parse attempt failed for this request. Raw response (first 800 chars):\n%s\n\nCleaned text (first 800 chars):\n%s\n\nError: %s",
+            first_response[:800],
+            cleaned_first[:800],
+            str(first_err)
+        )
 
     # Second Attempt (Retry with explicit correction instruction)
     retry_prompt = (
@@ -208,6 +217,11 @@ def call_llm_json(
         return {"result": parsed_json}
     except (json.JSONDecodeError, Exception) as second_err:
         # Structured error return instead of crashing
+        logger.error(
+            "Second JSON parse attempt also failed. Second raw response (first 800 chars):\n%s\n\nError: %s",
+            second_response[:800] if "second_response" in locals() else "N/A",
+            str(second_err)
+        )
         return {
             "error": "Failed to parse JSON response from local AI model after retry.",
             "details": str(second_err),

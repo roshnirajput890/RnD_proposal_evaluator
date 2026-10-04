@@ -7,5 +7,14 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true, // Fail if port 5173 is already in use instead of choosing another port
+    // Proxy backend API calls with extended timeout for long-running LLM requests
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        timeout: 500000, // 500s — allows LLM requests up to ~450s (backend's default 180s + buffer)
+      }
+    }
   },
 })
+

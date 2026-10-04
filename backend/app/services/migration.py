@@ -84,6 +84,14 @@ def run_migrations() -> None:
         _add_column_if_missing(conn, "evaluations", "reviewer_updated_at",
                                "TEXT DEFAULT NULL")        # ISO-8601 UTC timestamp
 
+        # ── Brick 9: novelty search fields ───────────────────────────────────
+        _add_column_if_missing(conn, "evaluations", "novelty_search_queries",
+                               "TEXT DEFAULT NULL")        # JSON array of query strings
+        _add_column_if_missing(conn, "evaluations", "retrieved_papers",
+                               "TEXT DEFAULT NULL")        # JSON array of paper dicts
+        _add_column_if_missing(conn, "evaluations", "external_evidence_used",
+                               "INTEGER DEFAULT NULL")     # 1=true, 0=false, NULL=unknown
+
         conn.commit()
 
     logger.info("run_migrations() complete")

@@ -2,6 +2,15 @@
 Main application entry point for the FastAPI backend.
 Configures CORS, registers modular routers, and initializes the server.
 """
+import logging
+
+# Configure logging so all app module loggers print to console
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes.health import router as health_router

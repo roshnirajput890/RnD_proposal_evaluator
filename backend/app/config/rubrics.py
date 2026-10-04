@@ -37,32 +37,61 @@ class RubricEntry:
 RUBRICS: Dict[str, RubricEntry] = {
 
     "general_analysis": RubricEntry(
-        dimension    = "Novelty",
+        dimension    = "Proposal Structure",
         description  = (
-            "How novel and original is the proposed idea relative to known approaches? "
-            "NOTE: This version has NO access to external literature or citation databases. "
-            "Base your assessment solely on what the proposal text claims about novelty, "
-            "and state this limitation explicitly in your justification."
+            "How clearly and completely does the proposal articulate its core elements: "
+            "title/topic, main idea, problem being solved, and proposed solution? "
+            "This is a structural completeness check, not a novelty judgement."
         ),
         score_1 = (
-            "The proposal describes a straightforward application of an existing, "
-            "well-established method with no meaningful differentiation from prior work. "
-            "No claim of novelty is made, or all such claims are too vague to evaluate."
+            "The proposal is vague or incomplete. Key elements (title, problem, solution) "
+            "are missing or too brief to evaluate meaningfully."
         ),
         score_3 = (
-            "The proposal applies a known approach in a moderately new context, or "
-            "combines existing techniques in a non-obvious way. Some novelty is evident "
-            "but the incremental nature limits the significance."
+            "The proposal covers most core elements but some are underdeveloped. "
+            "The problem or solution is stated but not clearly argued."
         ),
         score_5 = (
-            "The proposal introduces a genuinely novel concept, method, or application "
-            "that, based on the text provided, appears not to have been previously "
-            "reported in this form. The novelty claim is specific and well-argued."
+            "The proposal clearly and completely states title/topic, main idea, "
+            "the problem it addresses, and its proposed solution. All four elements "
+            "are specific, distinct, and well-argued."
         ),
         extra_notes = (
-            "IMPORTANT: Because no external literature search is available, you MUST "
-            "state in your score_justification that novelty is assessed solely from "
-            "the proposal text and has not been verified against published work."
+            "NOTE: Novelty evaluation (comparison against existing literature) is "
+            "handled by a separate agent. Do not score novelty here."
+        ),
+    ),
+
+    "novelty_agent": RubricEntry(
+        dimension    = "Novelty",
+        description  = (
+            "How novel and original is the proposed idea relative to existing published work? "
+            "You have access to a list of retrieved papers from OpenAlex. "
+            "You MUST only reference papers from that list — never invent citations. "
+            "IMPORTANT: This is a limited automated search (OpenAlex, ~3 queries). "
+            "It is NOT exhaustive. Score is capped at 4 — score 5 is not available here "
+            "because we cannot confirm novelty from an automated search alone."
+        ),
+        score_1 = (
+            "Retrieved papers show direct, substantial overlap with the proposed idea. "
+            "The claimed innovation appears to already exist in published form with "
+            "similar methodology and goals."
+        ),
+        score_3 = (
+            "Retrieved papers show related work but the proposed idea has meaningful "
+            "differences in approach, context, or application. Some novelty is evident "
+            "but the incremental nature limits the claim."
+        ),
+        score_5 = (
+            "SCORE 5 IS NOT AVAILABLE in this agent. Use 4 at most. "
+            "The maximum score is 4 because this is a limited automated search."
+        ),
+        extra_notes = (
+            "MANDATORY: Set external_evidence_used to true if any papers were retrieved, "
+            "false if the retrieved list is empty. "
+            "MANDATORY: State in novelty_confidence_note that this is a limited automated "
+            "search, not an exhaustive literature review, and confidence is capped at medium. "
+            "MANDATORY: Score must not exceed 4."
         ),
     ),
 
