@@ -33,6 +33,27 @@ const DIMS = [
   { key: 'impact_score',    label: 'Impact',      weight: 25 },
 ]
 
+// ── DemoBadge component ────────────────────────────────────────────────────────
+
+function DemoBadge() {
+  return (
+    <div style={{
+      display: 'inline-block',
+      background: '#e0f2fe',
+      border: '1px solid #0284c7',
+      color: '#0c4a6e',
+      padding: '4px 10px',
+      borderRadius: '4px',
+      fontSize: '0.75rem',
+      fontFamily: 'var(--font-mono)',
+      fontWeight: 600,
+      marginRight: '8px',
+    }}>
+      Demo result — precomputed
+    </div>
+  )
+}
+
 // ── ScoreBreakdown ─────────────────────────────────────────────────────────────
 
 function ScoreBreakdown({ scoring }) {
@@ -443,6 +464,8 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
   const [savedId,        setSavedId]        = useState(null)
   const [isDragging,     setIsDragging]     = useState(false)
   const [showRawText,    setShowRawText]    = useState(false)
+  const [isDemoResult,   setIsDemoResult]   = useState(false)
+  const [demoLoading,    setDemoLoading]    = useState(false)
   const fileInputRef = useRef(null)
 
   const fmtSize = b => {
@@ -479,6 +502,7 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
   const reset = () => {
     setSelectedFile(null); setAnalysisResult(null); setSavedId(null)
     setAnalyzeError(''); setIsOllamaError(false); setShowRawText(false)
+    setIsDemoResult(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -489,6 +513,33 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
            l.includes('connection refused') || l.includes('ollama') ||
            l.includes('not pulled') || l.includes('timed out') ||
            l.includes('local ai model')
+  }
+
+  const handleLoadDemo = async (demoId) => {
+    setDemoLoading(true)
+    setAnalyzeError('')
+    setAnalysisResult(null)
+    setIsDemoResult(false)
+    setSavedId(null)
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/evaluations/demo/${demoId}`)
+      const data = await res.json()
+      
+      if (!res.ok) {
+        setAnalyzeError(data?.detail || `Failed to load demo: ${res.status}`)
+        return
+      }
+
+      setAnalysisResult(data)
+      setIsDemoResult(true)
+      setSelectedFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    } catch (err) {
+      setAnalyzeError(err.message || 'Failed to load demo result')
+    } finally {
+      setDemoLoading(false)
+    }
   }
 
   const handleAnalyze = async () => {
@@ -612,6 +663,69 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
         </div>
       )}
 
+      {/* Demo section — try a sample proposal */}
+      {!analysisResult && (
+        <section className="upload-section" aria-label="Try demo proposal">
+          <span className="section-label">Demo &amp; Testing</span>
+          <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.85rem',
+              color: 'var(--ink-2)',
+              fontWeight: 500,
+            }}>
+              Try a sample proposal:
+            </span>
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) {
+                  handleLoadDemo(e.target.value)
+                }
+              }}
+              disabled={demoLoading}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.85rem',
+                padding: '6px 10px',
+                border: '1px solid var(--border)',
+                borderRadius: '4px',
+                background: 'var(--bg)',
+                color: 'var(--ink)',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="">— Select demo —</option>
+              <option value="strong_crispr">CRISPR Viral Detection (Strong)</option>
+              <option value="budget_error_chatbot">Chatbot with Budget Error</option>
+              <option value="mixed_blockchain">Mixed Blockchain Supply Chain</option>
+            </select>
+            {demoLoading && (
+              <span style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.8rem',
+                color: 'var(--ink-2)',
+              }}>
+                <span className="spinner" aria-hidden="true" style={{ width: '14px', height: '14px' }} />
+                Loading…
+              </span>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Upload area */}
       {!analysisResult && (
         <section className="upload-section" aria-label="Upload proposal">
@@ -676,6 +790,7 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
 
           <div className="results-header">
             <div className="results-title-group">
+              {isDemoResult && <DemoBadge />}
               <span className="status-tag">Analysis complete{savedId ? ' · saved' : ''}</span>
               <h2 className="results-doc-title">{analysisResult.filename}</h2>
             </div>

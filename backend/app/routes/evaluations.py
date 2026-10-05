@@ -189,6 +189,76 @@ def fetch_evaluation(record_id: str):
     return row
 
 
+@router.get("/evaluations/demo/{demo_id}", summary="Load a cached demo proposal result")
+def fetch_demo_evaluation(demo_id: str):
+    """
+    Load a pre-computed demo result from cached JSON.
+    Valid demo IDs: strong_crispr, budget_error_chatbot, mixed_blockchain
+    """
+    import os
+    
+    # Validate demo ID
+    valid_ids = {"strong_crispr", "budget_error_chatbot", "mixed_blockchain"}
+    if demo_id not in valid_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown demo proposal '{demo_id}'. Valid options: {', '.join(sorted(valid_ids))}"
+        )
+    
+    # Construct path to cached JSON
+    demo_dir = os.path.join(os.path.dirname(__file__), "..", "data", "cached_demo_results")
+    filepath = os.path.join(demo_dir, f"{demo_id}.json")
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Demo file not found: {demo_id}.json"
+        )
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            cached = _json.load(f)
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Failed to load demo file: {err}") from err
+    
+    # Extract the result and metadata
+    result = cached.get("result", {})
+    scoring = result.get("scoring", {})
+    coordinator = result.get("coordinator") or {}
+    
+    # Build response in same shape as real evaluation
+    response = {
+        "id": cached.get("id", demo_id),
+        "filename": cached.get("filename", f"{demo_id}.txt"),
+        "is_demo_result": True,
+        "generated_at": cached.get("generated_at"),
+        "pipeline_time_seconds": cached.get("pipeline_time_seconds"),
+        
+        # Fields from result
+        "analysis": result.get("analysis", {}),
+        "full_result": result,
+        "coordinator_summary": coordinator if coordinator else None,
+        "preliminary_recommendation": coordinator.get("preliminary_recommendation") if coordinator else scoring.get("score_band"),
+        "recommendation_reasoning": coordinator.get("recommendation_reasoning") if coordinator else None,
+        "coordinator_error": result.get("coordinator_error"),
+        
+        # Scores from nested structure
+        "novelty_score": result.get("novelty", {}).get("score"),
+        "technical_score": result.get("technical", {}).get("score"),
+        "financial_score": result.get("financial", {}).get("score"),
+        "impact_score": result.get("impact", {}).get("score"),
+        "overall_score": scoring.get("overall_score"),
+        "score_band": scoring.get("score_band"),
+        
+        # Metadata for display
+        "page_count": cached.get("page_count", 0),
+        "char_count": cached.get("char_count", 0),
+        "model_used": cached.get("model_used", "demo"),
+    }
+    
+    return response
+
+
 @router.get("/analytics", summary="Aggregate analytics from saved evaluations")
 def get_analytics():
     try:
