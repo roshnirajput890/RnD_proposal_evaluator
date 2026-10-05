@@ -1,0 +1,12 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "issue": "Route ordering conflict",
+      "description": "The /evaluations/{record_id} route (line 184) is defined before /evaluations/demo/{demo_id} (line 192). FastAPI matches routes in definition order, so requests to /api/evaluations/demo/strong_crispr will be caught by the generic {record_id} route and treated as a database lookup for record ID 'demo', returning 404 instead of serving the demo result.",
+      "severity": "critical",
+      "action": "Move the demo route definition before the generic {record_id} route in evaluations.py to ensure it matches first."
+    }
+  ],
+  "reviewDoc": "d:\\Projects\\R&D_analyzer\\.agents\\tasks\\demo-review.md"
+}

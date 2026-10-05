@@ -1,0 +1,128 @@
+{
+  "id": "budget_error_chatbot",
+  "title": "AI Mental Health Chatbot",
+  "description": "Good proposal but budget math error",
+  "filename": "budget_error_proposal.txt",
+  "generated_at": "2026-10-05 18:34:14",
+  "pipeline_time_seconds": 1023.4,
+  "result": {
+    "analysis": {
+      "title_or_topic": "AI-Powered Mental Health Chatbot for College Students",
+      "main_idea_summary": "To develop and pilot an AI chatbot utilizing CBT techniques to provide 24/7 mental health support to college students, addressing the significant unmet need for immediate access to support and reducing wait times for counseling services.",
+      "main_problem": "College students face unprecedented mental health challenges, with 60% reporting anxiety or depression, and university counseling centers have 3-6 week wait times, leaving students without immediate support.",
+      "proposed_solution": "A GPT-4 fine-tuned chatbot with natural language processing, sentiment analysis, and integration with campus resources, designed to screen for crisis situations, provide coping strategies, and escalate severe cases to human counselors, utilizing a curated dataset and validated assessments.",
+      "truncated": false
+    },
+    "novelty": {
+      "score": null,
+      "score_justification": "[score unavailable] Ollama unreachable during novelty evaluation.",
+      "summary": "Novelty evaluation failed — Ollama was unreachable.",
+      "status": "failed"
+    },
+    "technical": {
+      "score": 3,
+      "score_justification": "The proposal utilizes GPT-4 and a substantial dataset, but lacks detailed specifics on the fine-tuning process, potential biases in the data, and the ongoing monitoring and validation of the chatbot's responses, presenting moderate technical risks.",
+      "summary": "This project proposes an AI-powered chatbot for college students utilizing CBT techniques and GPT-4, aiming to address a significant mental health challenge. While the team possesses relevant expertise and a comprehensive plan, the proposal needs more detail regarding data quality, bias mitigation, and ongoing system validation to fully assess technical feasibility.",
+      "findings": [
+        {
+          "point": "GPT-4 reliance without detailed fine-tuning strategy",
+          "evidence": "The proposal mentions fine-tuning GPT-4 but lacks specifics on the methodology, hyperparameters, or evaluation metrics.",
+          "severity": "High"
+        },
+        {
+          "point": "Data bias and ethical considerations",
+          "evidence": "The anonymized dataset's origin and potential biases are not thoroughly addressed, raising concerns about fairness and accuracy.",
+          "severity": "Medium"
+        },
+        {
+          "point": "Lack of ongoing monitoring and validation",
+          "evidence": "The proposal doesn't outline a plan for continuous monitoring of the chatbot's performance and adaptation to evolving student needs.",
+          "severity": "Low"
+        }
+      ],
+      "missing_information": [
+        "Detailed fine-tuning process for GPT-4",
+        "Bias mitigation strategies for the conversation dataset",
+        "Plan for ongoing chatbot performance monitoring and validation"
+      ],
+      "questions_for_reviewer": [
+        "How will potential biases in the training data be addressed?",
+        "What metrics will be used to evaluate the chatbot's accuracy and effectiveness?",
+        "What is the plan for continuous monitoring and improvement of the chatbot's performance?"
+      ],
+      "confidence": "Medium",
+      "agent_name": "technical_agent",
+      "status": "success"
+    },
+    "financial": {
+      "agent_name": "financial_agent",
+      "status": "failed",
+      "score": null,
+      "score_justification": "[score unavailable] Budget extraction failed: Local AI model request timed out after 180 seconds. Local models are slower than cloud APIs; verify system resources and model size.",
+      "summary": "Financial evaluation failed: Budget extraction failed: Local AI model request timed out after 180 seconds. Local models are slower than cloud APIs; verify system resources and model size.",
+      "findings": [],
+      "missing_information": [
+        "Financial evaluation incomplete due to processing error"
+      ],
+      "questions_for_reviewer": [],
+      "confidence": "Low",
+      "budget_validation": {
+        "summary": "Budget validation not completed"
+      }
+    },
+    "impact": {
+      "score": 5,
+      "score_justification": "This proposal demonstrates a high potential impact through a scalable solution addressing a critical national problem – college student mental health – utilizing cutting-edge AI technology and a robust evaluation plan.",
+      "summary": "The project aims to significantly reduce college student anxiety and depression through an AI-powered chatbot, leveraging CBT techniques and a large dataset, while also preventing crises and potentially generating substantial cost savings. The project’s open-source data contribution and commercialization strategy further amplify its potential impact and reach.",
+      "findings": [
+        {
+          "point": "Significant Clinical Outcomes",
+          "evidence": "Projected 30% reduction in anxiety and 25% reduction in depression scores based on preliminary Stanford study.",
+          "severity": "High"
+        },
+        {
+          "point": "Potential for Large-Scale Impact",
+          "evidence": "Targeting 50,000+ students within two years and a potential market of 10M U.S. college students.",
+          "severity": "High"
+        },
+        {
+          "point": "Cost Savings and Crisis Prevention",
+          "evidence": "Projected $12M in healthcare cost savings and potential to prevent suicides through early intervention.",
+          "severity": "High"
+        }
+      ],
+      "missing_information": [
+        "Detailed description of data anonymization process",
+        "Specific details on the ethical oversight and ongoing monitoring of the AI chatbot's performance"
+      ],
+      "questions_for_reviewer": [
+        "How will the team ensure ongoing accuracy and effectiveness of the GPT-4 model?",
+        "What are the specific metrics for measuring user engagement and satisfaction with the chatbot?"
+      ],
+      "confidence": "High",
+      "agent_name": "impact_agent",
+      "status": "success"
+    },
+    "scoring": {
+      "novelty_score": null,
+      "technical_score": 3,
+      "financial_score": null,
+      "impact_score": 5,
+      "overall_score": null,
+      "score_band": "Insufficient Information",
+      "is_partial": true,
+      "null_count": 2,
+      "active_weights": {}
+    },
+    "coordinator": null,
+    "_agent_statuses": {
+      "general_analysis": "completed",
+      "novelty_agent": "failed",
+      "technical_agent": "completed",
+      "financial_agent": "failed",
+      "impact_agent": "completed",
+      "coordinator": "failed"
+    },
+    "coordinator_error": "Local AI model request timed out after 180 seconds. Local models are slower than cloud APIs; verify system resources and model size."
+  }
+}

@@ -181,19 +181,14 @@ def export_evaluation_json(record_id: str):
     )
 
 
-@router.get("/evaluations/{record_id}", summary="Fetch a single evaluation record")
-def fetch_evaluation(record_id: str):
-    row = get_evaluation_by_id(record_id)
-    if not row:
-        raise HTTPException(status_code=404, detail=f"Evaluation '{record_id}' not found.")
-    return row
-
-
 @router.get("/evaluations/demo/{demo_id}", summary="Load a cached demo proposal result")
 def fetch_demo_evaluation(demo_id: str):
     """
     Load a pre-computed demo result from cached JSON.
     Valid demo IDs: strong_crispr, budget_error_chatbot, mixed_blockchain
+    
+    NOTE: This route MUST be defined before the generic /{record_id} route
+    so that FastAPI matches this specific pattern first.
     """
     import os
     
@@ -257,6 +252,14 @@ def fetch_demo_evaluation(demo_id: str):
     }
     
     return response
+
+
+@router.get("/evaluations/{record_id}", summary="Fetch a single evaluation record")
+def fetch_evaluation(record_id: str):
+    row = get_evaluation_by_id(record_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Evaluation '{record_id}' not found.")
+    return row
 
 
 @router.get("/analytics", summary="Aggregate analytics from saved evaluations")

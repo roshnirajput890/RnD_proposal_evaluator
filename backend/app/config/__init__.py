@@ -19,3 +19,4 @@ OLLAMA_BASE_URL: str           = os.getenv("OLLAMA_BASE_URL", "http://localhost:
 LLM_MODEL: str                 = os.getenv("LLM_MODEL", "gemma3:4b")
 MAX_INPUT_CHARS: int           = int(os.getenv("MAX_INPUT_CHARS", "40000"))
 REQUEST_TIMEOUT_SECONDS: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "180.0"))
+PARALLEL_AGENTS: bool          = os.getenv("PARALLEL_AGENTS", "false").lower() in ("true", "1", "yes")

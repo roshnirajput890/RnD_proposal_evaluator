@@ -1,15 +1,16 @@
 """
-orchestrator.py — Evaluation pipeline (Brick 10).
+orchestrator.py — Evaluation pipeline (Brick 10 + parallelization).
 
 Pipeline:
   1. general_analysis   → structural extraction (title, summary, problem, solution)
-  2. novelty_agent      → 3-step: query extraction → OpenAlex search → scored comparison
-  3. technical_agent    → single-step technical feasibility assessment
-  4. financial_agent    → 3-step: budget extraction → validation → assessment
-  5. impact_agent       → single-step societal/strategic impact assessment
+  2-5. Parallel agents  → Novelty, Technical, Financial, Impact (2 at a time via asyncio)
   6. scoring.py         → weighted overall_score + score_band (pure Python)
   7. coordinator_agent  → synthesis referencing computed scores + novelty evidence flag
+
+Parallelization controlled by PARALLEL_AGENTS env var (default: true).
+Set PARALLEL_AGENTS=false to revert to sequential execution.
 """
+import asyncio
 import logging
 from typing import Any, Dict, Optional
 
@@ -21,8 +22,48 @@ from app.agents.impact_agent import run_impact_agent, AGENT_NAME as IMP_NAME
 from app.services.scoring import compute_scores, scoring_result_to_dict
 from app.agents.coordinator_agent import run_coordinator
 from app.services.llm_client import LLMClientError
+from app.config import PARALLEL_AGENTS
 
 logger = logging.getLogger(__name__)
+
+
+async def _run_agents_parallel(
+    proposal_text: str,
+    model: Optional[str],
+    timeout: Optional[float],
+    agent_statuses: Dict[str, str],
+):
+    """
+    Run four independent agents with max 2 concurrent (asyncio.Semaphore).
+    
+    Returns: (novelty, technical, financial, impact) results
+    """
+    semaphore = asyncio.Semaphore(2)  # Max 2 concurrent
+    
+    async def run_with_semaphore(agent_func, agent_name, display_name):
+        async with semaphore:
+            # Run in executor since agent functions are sync
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,
+                _run_agent_safe,
+                agent_func,
+                display_name,
+                proposal_text,
+                model,
+                timeout,
+                agent_statuses,
+            )
+    
+    # Kick off all four agents with concurrency limit
+    results = await asyncio.gather(
+        run_with_semaphore(run_novelty_agent, NOV_NAME, "novelty"),
+        run_with_semaphore(run_technical_agent, TECH_NAME, "technical"),
+        run_with_semaphore(run_financial_agent, FIN_NAME, "financial"),
+        run_with_semaphore(run_impact_agent, IMP_NAME, "impact"),
+    )
+    
+    return results  # (novelty, technical, financial, impact)
 
 
 def run_full_evaluation(
@@ -57,28 +98,30 @@ def run_full_evaluation(
     except Exception as exc:
         raise RuntimeError(f"general_analysis stage failed: {exc}") from exc
 
-    # ── Stage 2: Novelty evaluation (with external paper search) ─────────────
-    novelty = _run_agent_safe(
-        run_novelty_agent, "novelty", proposal_text, model, timeout, agent_statuses
-    )
+    # ── Stage 2-5: Run four independent agents ────────────────────────────────
+    if PARALLEL_AGENTS:
+        logger.info("Running agents in parallel (max 2 concurrent)")
+        novelty, technical, financial, impact = asyncio.run(
+            _run_agents_parallel(proposal_text, model, timeout, agent_statuses)
+        )
+    else:
+        logger.info("Running agents sequentially (PARALLEL_AGENTS=false)")
+        novelty = _run_agent_safe(
+            run_novelty_agent, "novelty", proposal_text, model, timeout, agent_statuses
+        )
+        technical = _run_agent_safe(
+            run_technical_agent, "technical", proposal_text, model, timeout, agent_statuses
+        )
+        financial = _run_agent_safe(
+            run_financial_agent, "financial", proposal_text, model, timeout, agent_statuses
+        )
+        impact = _run_agent_safe(
+            run_impact_agent, "impact", proposal_text, model, timeout, agent_statuses
+        )
+
     novelty_for_coord = {**novelty, "_status": agent_statuses.get(NOV_NAME, "failed")}
-
-    # ── Stage 3: Technical feasibility evaluation ────────────────────────────
-    technical = _run_agent_safe(
-        run_technical_agent, "technical", proposal_text, model, timeout, agent_statuses
-    )
     technical_for_coord = {**technical, "_status": agent_statuses.get(TECH_NAME, "failed")}
-
-    # ── Stage 4: Financial viability evaluation ──────────────────────────────
-    financial = _run_agent_safe(
-        run_financial_agent, "financial", proposal_text, model, timeout, agent_statuses
-    )
     financial_for_coord = {**financial, "_status": agent_statuses.get(FIN_NAME, "failed")}
-
-    # ── Stage 5: Impact evaluation ───────────────────────────────────────────
-    impact = _run_agent_safe(
-        run_impact_agent, "impact", proposal_text, model, timeout, agent_statuses
-    )
     impact_for_coord = {**impact, "_status": agent_statuses.get(IMP_NAME, "failed")}
 
     # ── Stage 6: Scoring (pure Python — no LLM) ──────────────────────────────

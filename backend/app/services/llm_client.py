@@ -58,6 +58,7 @@ def call_llm(
     model: Optional[str] = None,
     timeout: Optional[float] = None,
     format_json: bool = False,
+    max_tokens: Optional[int] = None,
 ) -> str:
     """
     Calls the local Ollama model via POST /api/generate with stream=false.
@@ -68,6 +69,7 @@ def call_llm(
         model: Optional model override (defaults to config.LLM_MODEL).
         timeout: Optional timeout override in seconds (defaults to at least 120s).
         format_json: If True, requests Ollama's structured JSON format mode.
+        max_tokens: Optional max tokens to generate (num_predict in Ollama).
 
     Returns:
         str: Raw text response from the model.
@@ -91,6 +93,8 @@ def call_llm(
     }
     if format_json:
         payload["format"] = "json"
+    if max_tokens is not None:
+        payload["options"]["num_predict"] = max_tokens
 
     try:
         with httpx.Client(timeout=req_timeout) as client:
@@ -152,11 +156,15 @@ def call_llm_json(
     user_prompt: str,
     model: Optional[str] = None,
     timeout: Optional[float] = None,
+    max_tokens: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Calls the local Ollama model and enforces valid JSON output.
     Applies explicit formatting instructions, strips code fences and think tags,
     and automatically retries once if initial JSON decoding fails.
+
+    Args:
+        max_tokens: Optional max tokens to generate (num_predict in Ollama).
 
     Returns:
         dict: Parsed JSON object, or a structured error dict if both attempts fail.
@@ -178,6 +186,7 @@ def call_llm_json(
         model=model,
         timeout=timeout,
         format_json=True,
+        max_tokens=max_tokens,
     )
 
     cleaned_first = _clean_json_text(first_response)
@@ -209,6 +218,7 @@ def call_llm_json(
             model=model,
             timeout=timeout,
             format_json=True,
+            max_tokens=max_tokens,
         )
         cleaned_second = _clean_json_text(second_response)
         parsed_json = json.loads(cleaned_second)
