@@ -248,6 +248,7 @@ def run_full_evaluation(
             external_evidence_used = novelty.get("external_evidence_used", False),
             model   = model,
             timeout = timeout,
+            agent_statuses = agent_statuses,
         )
 
         elapsed = time.time() - coord_start

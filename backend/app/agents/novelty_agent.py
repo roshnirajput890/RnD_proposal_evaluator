@@ -40,8 +40,6 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
-
 from app.services.llm_client import call_llm_json, LLMClientError
 from app.services.paper_search import search_and_merge
 from app.config.rubrics import get_rubric_block
@@ -96,22 +94,20 @@ STRICT RULES:
 
 Respond with ONLY valid JSON:
 {{
-  "score": 3,
-  "score_justification": "1-2 sentences with specific proposal text.",
-  "external_evidence_used": true,
+  "score": <integer 1-4>,
+  "score_justification": "<1-2 sentences with specific proposal text>",
+  "external_evidence_used": <true or false>,
   "closest_papers": [
     {{
-      "title": "exact from retrieved list",
-      "year": 2022,
-      "url": "https://...",
-      "similarity_level": "low|medium|high",
-      "reason": "1 sentence"
+      "title": "<exact title from retrieved list>",
+      "year": <year>,
+      "url": "<url from retrieved list>",
+      "similarity_level": "<low|medium|high>"
     }}
   ],
-  "overlap_concerns": ["1 sentence", "1 sentence"],
-  "differentiation_claims_supported": ["1 sentence", "1 sentence"],
-  "remaining_gaps": ["1 sentence"],
-  "novelty_confidence_note": "Limited automated search. Not exhaustive. Capped at medium."
+  "overlap_concerns": ["<1 sentence>"],
+  "differentiation_claims_supported": ["<1 sentence>"],
+  "remaining_gaps": ["<1 sentence>"]
 }}
 """
 
@@ -241,6 +237,7 @@ def _enforce_rules(result: Dict[str, Any], papers: List[Dict[str, Any]]) -> Dict
     - score ≤ 4 (cap at 4 if evidence present; allow up to 4 without)
     - external_evidence_used = bool(papers)
     - closest_papers only contain papers from the retrieved list
+    - Overwrite title/year/url from retrieved data to prevent hallucination
     - Limit findings to max 3 per category
     - novelty_confidence_note is always set
     """
@@ -259,18 +256,28 @@ def _enforce_rules(result: Dict[str, Any], papers: List[Dict[str, Any]]) -> Dict
     # Force external_evidence_used
     result["external_evidence_used"] = bool(papers)
 
-    # Validate closest_papers — only keep entries with titles found in retrieved list
-    valid_titles = {p["title"].lower().strip() for p in papers}
+    # Build lookup dict: lowercase title -> paper data
+    paper_lookup = {p["title"].lower().strip(): p for p in papers}
+    
+    # Validate closest_papers — match by lowercase title and overwrite with retrieved data
     valid_closest = []
     for cp in (result.get("closest_papers") or []):
         if not isinstance(cp, dict):
             continue
         cp_title = (cp.get("title") or "").lower().strip()
-        if cp_title and cp_title in valid_titles:
+        if cp_title and cp_title in paper_lookup:
+            # Found match — overwrite with retrieved paper data
+            retrieved = paper_lookup[cp_title]
+            validated_entry = {
+                "title": retrieved["title"],  # Use exact title from retrieved
+                "year": retrieved.get("year"),
+                "url": retrieved.get("url"),
+                "similarity_level": cp.get("similarity_level", "low"),
+            }
             # Enforce similarity_level is one of the valid values
-            if cp.get("similarity_level") not in ("low", "medium", "high"):
-                cp["similarity_level"] = "low"
-            valid_closest.append(cp)
+            if validated_entry["similarity_level"] not in ("low", "medium", "high"):
+                validated_entry["similarity_level"] = "low"
+            valid_closest.append(validated_entry)
     result["closest_papers"] = valid_closest
 
     # Always set a confidence note
@@ -363,13 +370,20 @@ def run_novelty_agent(
             external_search_unavailable = True
             papers = []
 
-    # ── Step C: compare + score (uses the NOVELTY_TIMEOUT_SECONDS from orchestrator) ────────────
-    step_c = _compare_with_papers(
-        claimed_innovation = claimed_innovation,
-        papers             = papers,
-        model              = model,
-        timeout            = timeout,
-    )
+    # ── Step C: compare + score (skip if no papers retrieved) ────────────────
+    if not papers:
+        # No papers retrieved — skip LLM step C and use fallback
+        logger.info("No papers retrieved; skipping step C and using fallback")
+        step_c = _fallback_result(papers)
+        step_c["remaining_gaps"] = ["No external papers retrieved; novelty not assessed."]
+    else:
+        # Papers available — run step C comparison
+        step_c = _compare_with_papers(
+            claimed_innovation = claimed_innovation,
+            papers             = papers,
+            model              = model,
+            timeout            = timeout,
+        )
 
     # If external search was unavailable, mark it
     if external_search_unavailable and not papers:

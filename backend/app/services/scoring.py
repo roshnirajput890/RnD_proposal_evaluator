@@ -190,3 +190,32 @@ def scoring_result_to_dict(r: ScoringResult) -> dict:
         "null_count":      r.null_count,
         "active_weights":  r.active_weights,
     }
+
+
+
+# ── Agent state descriptions for UI ────────────────────────────────────────────
+
+def get_agent_state_description(score: Optional[int], agent_status: str, agent_name: str) -> str:
+    """
+    Return a human-readable description of an agent's state for display.
+    
+    Args:
+        score: The agent's score (1-5 or None)
+        agent_status: "completed", "failed", "error", or other
+        agent_name: Name of the agent (e.g., "technical", "financial")
+    
+    Returns:
+        "Scored (X/5)" | "Failed: timeout or parse error" | "Not applicable: no [section]"
+    """
+    if score is not None:
+        return f"Scored ({score}/5)"
+    elif agent_status in ("failed", "error"):
+        return "Failed: timeout or parse error"
+    elif agent_name == "financial":
+        return "Not applicable: no budget or financial section found"
+    elif agent_name == "technical":
+        return "Not applicable: no technical methodology found"
+    elif agent_name == "impact":
+        return "Not applicable: no impact or objectives section found"
+    else:
+        return "Not applicable: data unavailable"

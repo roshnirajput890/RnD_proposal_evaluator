@@ -9,6 +9,7 @@ import json
 import re
 from typing import Any, Dict, Optional
 import httpx
+from json_repair import repair_json
 
 from app.config import (
     OLLAMA_BASE_URL, LLM_MODEL, REQUEST_TIMEOUT_SECONDS,
@@ -96,14 +97,13 @@ def call_llm(
         "system": system_prompt,
         "stream": False,
         "keep_alive": OLLAMA_KEEP_ALIVE,
+        "format": "json",  # Always request JSON format
         "options": {
-            "temperature": temperature if temperature is not None else OLLAMA_TEMPERATURE,
+            "temperature": temperature if temperature is not None else 0.2,
             "num_ctx": num_ctx if num_ctx is not None else OLLAMA_NUM_CTX,
-            "num_predict": max_tokens if max_tokens is not None else OLLAMA_NUM_PREDICT,
+            "num_predict": max_tokens if max_tokens is not None else 1024,
         },
     }
-    if format_json:
-        payload["format"] = "json"
 
     try:
         with httpx.Client(timeout=req_timeout) as client:
@@ -218,6 +218,17 @@ def call_llm_json(
             return parsed_json
         return {"result": parsed_json}
     except json.JSONDecodeError as first_err:
+        # Try repair_json before retry
+        try:
+            repaired = repair_json(cleaned_first)
+            parsed_json = json.loads(repaired)
+            if isinstance(parsed_json, dict):
+                logger.info("JSON repaired successfully after first parse failure")
+                return parsed_json
+            return {"result": parsed_json}
+        except Exception:
+            pass  # Fall through to retry
+        
         # Log the raw text that failed to parse
         logger.warning(
             "First JSON parse attempt failed for this request. Raw response (first 800 chars):\n%s\n\nCleaned text (first 800 chars):\n%s\n\nError: %s",
@@ -245,7 +256,12 @@ def call_llm_json(
             temperature=temperature,
         )
         cleaned_second = _clean_json_text(second_response)
-        parsed_json = json.loads(cleaned_second)
+        try:
+            parsed_json = json.loads(cleaned_second)
+        except json.JSONDecodeError:
+            # Try repair_json on second attempt
+            parsed_json = json.loads(repair_json(cleaned_second))
+        
         if isinstance(parsed_json, dict):
             return parsed_json
         return {"result": parsed_json}

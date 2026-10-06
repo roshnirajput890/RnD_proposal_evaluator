@@ -161,7 +161,7 @@ function ScoreBreakdown({ scoring }) {
 
 // ── CoordinatorPanel ───────────────────────────────────────────────────────────
 
-function CoordinatorPanel({ coordinator, coordinatorError }) {
+function CoordinatorPanel({ coordinator, coordinatorError, novelty }) {
   const [open, setOpen] = useState(true)
 
   if (coordinatorError && !coordinator) {
@@ -187,6 +187,12 @@ function CoordinatorPanel({ coordinator, coordinatorError }) {
   const recConf = REC_CONFIG[coordinator.preliminary_recommendation] || REC_CONFIG['Insufficient Information']
   const confCls = CONFIDENCE_CLS[coordinator.coordinator_confidence] || 'status-muted'
 
+  // Determine novelty disclaimer based on whether external papers were used
+  const hasExternalEvidence = novelty?.external_evidence_used === true && novelty?.score != null
+  const noveltyDisclaimer = hasExternalEvidence
+    ? "Novelty assessment uses a limited automated search (OpenAlex, top 3 papers). It is not an exhaustive literature review."
+    : "Novelty assessment has no external literature evidence in this version."
+
   return (
     <div className="analysis-section coord-section">
       <div className="analysis-section-header" style={{ cursor: 'pointer' }}
@@ -210,7 +216,7 @@ function CoordinatorPanel({ coordinator, coordinatorError }) {
         borderBottom: '1px solid var(--border-subtle)',
         fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--ink-3)', lineHeight: 1.5 }}>
         AI-generated preliminary evaluation. A human reviewer makes the final decision.
-        Novelty assessment has no external literature evidence in this version.
+        {noveltyDisclaimer}
       </div>
 
       {open && (
@@ -670,6 +676,7 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
   const analysis    = analysisResult?.analysis    || null
   const coordinator = analysisResult?.coordinator || null
   const scoring     = analysisResult?.scoring     || null
+  const novelty     = analysisResult?.novelty     || null
 
   const loadingMsg = () => {
     if (analysisPhase === 'extracting') return { h: 'Extracting text from PDF',      s: 'reading pages in-memory · PyMuPDF' }
@@ -897,7 +904,11 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
           <ScoreBreakdown scoring={scoring} />
 
           {/* Coordinator panel */}
-          <CoordinatorPanel coordinator={coordinator} coordinatorError={analysisResult.coordinator_error} />
+          <CoordinatorPanel 
+            coordinator={coordinator} 
+            coordinatorError={analysisResult.coordinator_error}
+            novelty={novelty}
+          />
 
           {/* Reviewer panel */}
           <ReviewerPanel savedId={savedId} existingReview={null} />
