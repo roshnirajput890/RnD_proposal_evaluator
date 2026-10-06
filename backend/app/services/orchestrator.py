@@ -25,7 +25,7 @@ from app.agents.coordinator_agent import run_coordinator
 from app.services.llm_client import LLMClientError
 from app.services.text_chunker import extract_relevant_text
 from app.config import (
-    PARALLEL_AGENTS, AGENT_CONCURRENCY, AGENT_TIMEOUT_SECONDS, MAX_CHARS_PER_AGENT
+    PARALLEL_AGENTS, AGENT_CONCURRENCY, AGENT_TIMEOUT_SECONDS, NOVELTY_TIMEOUT_SECONDS, MAX_CHARS_PER_AGENT
 )
 
 logger = logging.getLogger(__name__)
@@ -181,7 +181,8 @@ def run_full_evaluation(
         if evaluation_id:
             set_progress(evaluation_id, "novelty", 1, 6)
         novelty = _run_agent_safe_with_timeout(
-            run_novelty_agent, "novelty", proposal_text, model, timeout, agent_statuses, truncation_flags
+            run_novelty_agent, "novelty", proposal_text, model, timeout, agent_statuses, truncation_flags,
+            agent_timeout=NOVELTY_TIMEOUT_SECONDS
         )
         
         if evaluation_id:
@@ -370,11 +371,13 @@ def _run_agent_safe_with_timeout(
     timeout: Optional[float],
     agent_statuses: Dict[str, str],
     truncation_flags: Dict[str, bool],
+    agent_timeout: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Run an agent function with timeout and error handling (for sequential mode).
     
-    Agent-level timeout is enforced by ThreadPoolExecutor.result(timeout=AGENT_TIMEOUT_SECONDS).
+    Agent-level timeout is enforced by ThreadPoolExecutor.result(timeout=agent_timeout).
+    If agent_timeout is None, uses AGENT_TIMEOUT_SECONDS.
     LLM request timeout is controlled by REQUEST_TIMEOUT_SECONDS in config.
     The timeout parameter is kept for backward compatibility but not used for agent execution.
     
@@ -389,6 +392,9 @@ def _run_agent_safe_with_timeout(
     
     agent_start = time.time()
     
+    # Use agent-specific timeout if provided, otherwise use AGENT_TIMEOUT_SECONDS
+    timeout_to_use = agent_timeout if agent_timeout is not None else AGENT_TIMEOUT_SECONDS
+    
     # Use threading for timeout since these are sync functions
     import concurrent.futures
     
@@ -401,7 +407,7 @@ def _run_agent_safe_with_timeout(
             )
             
             try:
-                result = future.result(timeout=AGENT_TIMEOUT_SECONDS)
+                result = future.result(timeout=timeout_to_use)
                 elapsed = time.time() - agent_start
                 
                 logger.info(
@@ -427,7 +433,7 @@ def _run_agent_safe_with_timeout(
                 agent_statuses[agent_name] = "failed"
                 return {
                     "score": None,
-                    "score_justification": f"[score unavailable] {agent_display_name.capitalize()} agent timed out after {int(AGENT_TIMEOUT_SECONDS)} seconds.",
+                    "score_justification": f"[score unavailable] {agent_display_name.capitalize()} agent timed out after {int(timeout_to_use)} seconds.",
                     "summary": f"{agent_display_name.capitalize()} evaluation timed out — try a shorter document.",
                     "status": "failed",
                     "error_code": "agent_timeout",

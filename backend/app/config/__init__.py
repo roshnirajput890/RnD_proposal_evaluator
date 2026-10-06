@@ -24,6 +24,7 @@ PARALLEL_AGENTS: bool          = os.getenv("PARALLEL_AGENTS", "false").lower() i
 # Performance & Timeout Settings
 AGENT_CONCURRENCY: int         = int(os.getenv("AGENT_CONCURRENCY", "1"))
 AGENT_TIMEOUT_SECONDS: float   = float(os.getenv("AGENT_TIMEOUT_SECONDS", "180"))
+NOVELTY_TIMEOUT_SECONDS: float = float(os.getenv("NOVELTY_TIMEOUT_SECONDS", "240"))
 MAX_CHARS_PER_AGENT: int       = int(os.getenv("MAX_CHARS_PER_AGENT", "6000"))
 
 # Ollama Performance Tuning
