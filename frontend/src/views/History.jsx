@@ -601,7 +601,13 @@ export default function History({
                       <span className="mono-id" title={row.id}>{row.id.slice(0, 8)}…</span>
                     </td>
                     <td className="col-title">
-                      <span className="row-title">{row.title_or_topic || row.filename}</span>
+                      <span className="row-title">
+                        {row.title_or_topic && 
+                         !row.title_or_topic.startsWith('Not stated') && 
+                         !row.title_or_topic.startsWith('Analysis parsing')
+                          ? row.title_or_topic
+                          : row.filename}
+                      </span>
                       <span className="row-pi">{row.filename}</span>
                     </td>
                     <td><span className="dept-tag">{row.model_used || '—'}</span></td>

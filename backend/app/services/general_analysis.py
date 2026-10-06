@@ -12,7 +12,7 @@ scoring.py.
 from typing import Any, Dict
 import time
 import logging
-from app.config import MAX_INPUT_CHARS
+from app.config import GENERAL_ANALYSIS_MAX_CHARS
 
 logger = logging.getLogger(__name__)
 from app.services.llm_client import call_llm_json
@@ -38,8 +38,8 @@ def analyze_proposal(proposal_text: str) -> Dict[str, Any]:
             "truncated":         False,
         }
 
-    is_truncated = len(proposal_text) > MAX_INPUT_CHARS
-    text_to_use  = proposal_text[:MAX_INPUT_CHARS] if is_truncated else proposal_text
+    is_truncated = len(proposal_text) > GENERAL_ANALYSIS_MAX_CHARS
+    text_to_use  = proposal_text[:GENERAL_ANALYSIS_MAX_CHARS] if is_truncated else proposal_text
 
     rubric_block = get_rubric_block(AGENT_NAME)
 

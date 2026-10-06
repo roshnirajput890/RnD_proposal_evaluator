@@ -896,7 +896,7 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
               fontSize: '0.875rem',
               lineHeight: '1.5'
             }} role="alert">
-              <strong>⚠️ Performance optimization applied:</strong> Input text was shortened for some agents to improve performance. Results are based on relevant sections only.
+              <strong>⚠️ Performance optimization applied:</strong> Each agent reads the ~3,000 most relevant characters of the document.
             </div>
           )}
 
