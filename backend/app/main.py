@@ -22,6 +22,8 @@ from app.services.database import init_db
 from app.services.migration import run_migrations
 from app.config import OLLAMA_BASE_URL, LLM_MODEL
 
+logger = logging.getLogger(__name__)
+
 # 1. Initialize the FastAPI application instance
 app = FastAPI(
     title="AI-Based Multi-Agent R&D Proposal Evaluation System API",
@@ -59,9 +61,22 @@ app.include_router(evaluations_router)
 
 @app.on_event("startup")
 def on_startup():
-    """Initialise the SQLite database and apply schema migrations."""
+    """Initialise the SQLite database, apply schema migrations, and warm up Ollama."""
     init_db()
     run_migrations()
+    
+    # Warm-up Ollama model
+    try:
+        from app.services.llm_client import call_llm
+        logger.info("Warming up Ollama model %s...", LLM_MODEL)
+        call_llm(
+            system_prompt="You are a helpful assistant.",
+            user_prompt="Say 'ready' in one word.",
+            timeout=30.0,
+        )
+        logger.info("Model warm-up complete.")
+    except Exception as e:
+        logger.warning("Model warm-up failed (non-fatal): %s", e)
 
 
 

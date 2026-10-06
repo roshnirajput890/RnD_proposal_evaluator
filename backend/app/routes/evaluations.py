@@ -25,6 +25,7 @@ from app.services.database import (
     compute_analytics,
 )
 from app.services.report_generator import generate_pdf_report
+from app.services.orchestrator import get_progress
 
 router = APIRouter(prefix="/api", tags=["Evaluations"])
 
@@ -268,3 +269,20 @@ def get_analytics():
         return compute_analytics()
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"Failed to compute analytics: {err}") from err
+
+
+@router.get("/evaluations/{record_id}/progress", summary="Get analysis progress for an evaluation")
+def get_evaluation_progress(record_id: str):
+    """
+    Returns progress information for an active analysis.
+    Used for polling during long-running evaluations.
+    
+    Returns 404 if analysis is complete or progress info has been cleared.
+    """
+    progress = get_progress(record_id)
+    if not progress:
+        raise HTTPException(
+            status_code=404,
+            detail="No active analysis for this ID (analysis may be complete)"
+        )
+    return progress

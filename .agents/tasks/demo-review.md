@@ -1,77 +1,77 @@
 # Demo Mode Implementation Review
 
+**Date:** 2025-01-20  
+**Status:** ✅ APPROVED
+
 ## Summary
 
-Demo Mode adds a "Try a sample proposal" dropdown on the New Analysis page with three precomputed results (CRISPR, Chatbot, Blockchain), displayed with a blue "Demo result — precomputed" badge. The feature uses a new `/api/evaluations/demo/{id}` endpoint to serve cached JSON results. The real upload-and-analyze flow remains unchanged.
+Demo Mode adds a precomputed sample proposal dropdown to the New Analysis page with a clear "Demo result — precomputed" badge on results. Three cached proposals load instantly without running the pipeline. The implementation is purely additive: the real upload-and-analyze flow remains unchanged, and demo results display using existing UI components. All cached JSON files parse cleanly, the demo API endpoint routes correctly, and the frontend build succeeds without errors.
 
-**Watch for:** Route ordering conflict between `/evaluations/{record_id}` and `/evaluations/demo/{demo_id}` will prevent demo endpoint from being reached. Demo dropdown will fail silently when loading.
-
-**Verdict**: NEEDS_CHANGES
+**Verdict**: APPROVED
 
 ---
 
 ## High-level view
 
-The implementation correctly separates demo and real flows: demo dropdown appears independently above the upload area, demo results display with a badge to signal they're precomputed, and the real analysis endpoint is untouched. Demo badge resets properly when switching to real file upload. Three cached JSON files are valid UTF-8 and parse cleanly. Frontend build succeeds with no errors.
-
-However, the demo API endpoint is unreachable due to a FastAPI route ordering issue. The generic `/evaluations/{record_id}` route (defined first) catches requests to `/evaluations/demo` before the specific demo route is ever evaluated. This must be fixed by moving the demo route definition before the generic record endpoint, or by using a stricter path pattern. Without this fix, attempts to load demo proposals will fail with a 404 from the wrong endpoint.
+The demo endpoint validates demo IDs against a hardcoded allowlist and serves pre-computed results from cached JSON files, with the critical route ordering fix in place so FastAPI matches `/evaluations/demo/{demo_id}` before the generic `/evaluations/{record_id}` route. The demo dropdown appears above the file upload area in a separate "Demo & Testing" section, and selecting a demo fetches the cached result through the same endpoint as a real analysis would. The demo badge renders only when `isDemoResult=true` and disappears when switching to real file upload or clicking "New document". All three cached JSON files are valid UTF-8 with complete evaluation results (strong CRISPR proposal scores 3.8, budget error chatbot has insufficient information, mixed blockchain scores 3.25).
 
 ---
 
 <details>
-<summary>Issues (1)</summary>
+<summary>Issues (0)</summary>
 
-1. **Route ordering conflict** — `/evaluations/{record_id}` defined before `/evaluations/demo/{demo_id}` means requests to `/api/evaluations/demo/strong_crispr` will be caught by the generic route with `record_id="demo"`, returning 404 from the wrong endpoint. Move the demo route definition before the generic `{record_id}` route to ensure it matches first.
+No blocking issues or gaps identified.
 
 </details>
+
+---
 
 <details>
 <summary>Details</summary>
 
-## Route conflict in evaluations.py
+### Route Ordering: Demo Route Before Generic
 
-The backend defines `/evaluations/{record_id}` at line 184 and `/evaluations/demo/{demo_id}` at line 192. FastAPI matches routes in definition order, so `/evaluations/demo` will never reach the demo endpoint. The request will hit the generic `{record_id}` route, treat `"demo"` as a record ID from the database, fail to find it, and return 404 with the message "Evaluation 'demo' not found." instead of the expected demo result.
+The `/api/evaluations/demo/{demo_id}` route is defined at line 184, before the generic `/api/evaluations/{record_id}` route at line 257. This ordering is critical: FastAPI matches routes in definition order, so the specific demo pattern must come first. The implementation includes a clear comment explaining this constraint. The route validation whitelist hardcodes the three demo IDs (strong_crispr, budget_error_chatbot, mixed_blockchain) and returns 404 with a helpful message if an invalid demo ID is requested.
 
-The demo route must be registered first (moved to an earlier line) or the generic route must use a stricter pattern that doesn't match literal strings like `"demo"`, `"demo_results"`, or other keywords that could conflict with future reserved paths.
+### Demo Result Structure
 
-## Frontend implementation — sound
+The endpoint extracts the cached JSON structure and rebuilds the response to match the exact shape of a real evaluation: metadata fields (id, filename, generated_at, pipeline_time_seconds), analysis/full_result/coordinator, all four dimension scores (novelty/technical/financial/impact), overall_score, score_band, and preliminary_recommendation. Critically, the response includes `is_demo_result: true` so the frontend can render the badge. The structure mirrors real evaluations so existing UI components (ScoreBreakdown, CoordinatorPanel, etc.) consume demo results without modification.
 
-The demo dropdown correctly appears above the upload area in a "Demo & Testing" section, with three labeled options. The `handleLoadDemo` function fetches from `/api/evaluations/demo/{id}` and sets `isDemoResult=true` to trigger badge rendering. The badge component displays correctly when `isDemoResult` is true. The demo flag resets to false when a real file is selected or when the "New document" button is clicked, ensuring no badge appears on real results. This design is correct and will work once the backend route conflict is fixed.
+### Demo Dropdown and Selection
 
-## Cached JSON files — valid
+The demo section renders only when `!analysisResult`, appearing above the file upload area in a labeled "Demo & Testing" subsection. The dropdown offers three human-readable options ("CRISPR Viral Detection (Strong)", "Chatbot with Budget Error", "Mixed Blockchain Supply Chain") mapped to the demo IDs. The `handleLoadDemo` function fetches from `/api/evaluations/demo/{demoId}`, sets `isDemoResult=true` on success, and clears selected files so the demo result displays without ambiguity about which input source is active.
 
-All three cached demo JSON files parse cleanly with UTF-8 encoding:
-- `strong_crispr.json` — valid structure, contains full evaluation result
-- `budget_error_chatbot.json` — valid structure, contains full evaluation result  
-- `mixed_blockchain.json` — re-encoded to UTF-8 (was previously cp1252), now consistent with others
+### Demo Badge and State Reset
 
-The demo endpoint response payload correctly extracts nested fields from the cached result, merges metadata, and adds the `is_demo_result: true` flag for frontend badge rendering.
+The badge component renders as a light blue inline pill with monospace font, labeled "Demo result — precomputed". It appears in the results header only when `isDemoResult=true`. The demo flag is reset in two paths: explicitly in the `reset()` function (called by "New document" button) and in `handleLoadDemo()` itself (to clear the previous demo flag before loading a new one). When a real file is selected, `analysisResult` is cleared, which hides the demo section and results area together. The UI flow prevents confusion between demo and real results.
 
-## Pipeline and real analysis flow — untouched
+### Frontend Build Status
 
-Only three files were modified:
-- `backend/app/routes/evaluations.py` — added demo endpoint only
-- `frontend/src/views/NewAnalysis.jsx` — added demo dropdown and badge only
-- `backend/app/data/cached_demo_results/mixed_blockchain.json` — encoding fix only
+The Vite build completed successfully: 23 modules transformed, 150ms build time, no errors or warnings. The bundle output includes HTML (1.07 kB), CSS (39.86 kB gzip), and JS (299.10 kB gzip). No new build failures introduced.
 
-No changes to `orchestrator.py`, agent logic, scoring, database schema, or the `/api/analyze` endpoint. The real proposal upload and analysis flow is completely intact.
+### Cached Demo JSON Files
 
-## Build verification
+All three files exist and parse cleanly as UTF-8:
+- **strong_crispr.json** (19,085 bytes): id=strong_crispr, overall_score=3.8, score_band="Revise and Resubmit"
+- **budget_error_chatbot.json** (7,244 bytes): id=budget_error_chatbot, overall_score=None (intentional—demonstrates handling of partial/error results), score_band="Insufficient Information"
+- **mixed_blockchain.json** (17,973 bytes): id=mixed_blockchain, overall_score=3.25, score_band="Revise and Resubmit"
 
-Frontend build succeeds: 23 modules transformed, output includes HTML and minified JS/CSS assets, build time 1.06s. Backend Python syntax check passes. No new errors introduced.
+The encoding fix (UTF-8 with no BOM) is confirmed; all files load without decoding errors.
 
-</details>
+### Real Upload Path Unchanged
 
-## File map
-
-<details>
-<summary>Modified files</summary>
-
-- `backend/app/routes/evaluations.py` — added `GET /api/evaluations/demo/{demo_id}` endpoint (lines 192–260)
-- `frontend/src/views/NewAnalysis.jsx` — added demo dropdown section (lines 669–713), DemoBadge component (lines 43–55), isDemoResult state, handleLoadDemo function (lines 518–541)
-- `backend/app/data/cached_demo_results/mixed_blockchain.json` — re-encoded UTF-8, structure unchanged
-- `.agents/tasks/verification.md` — implementation report (documentation only)
-
-**Full diff available via:** `git diff HEAD~1 HEAD`
+The existing upload, validation, and analyze flow remain untouched. File selection still triggers validation and enables the "Run analysis" button. The `handleAnalyze` function calls the real pipeline (POST /api/analyze). The distinction is maintained: demo results bypass the pipeline entirely, while real results run through all four agents and the coordinator.
 
 </details>
+
+---
+
+## Approval Criteria Met
+
+- ✅ All 3 JSON files parse cleanly (UTF-8 verified, no encoding errors)
+- ✅ Demo endpoint exists and mirrors real endpoint response shape (is_demo_result flag, all score fields, coordinator summary)
+- ✅ Demo dropdown added without breaking real upload flow (separate section, real upload fully intact)
+- ✅ Demo badge shown on demo results and NOT on real results (isDemoResult conditional, resets on file selection and "New document")
+- ✅ No pipeline agents, scoring logic, or real upload endpoint modified
+- ✅ Frontend build succeeds with no new errors
+

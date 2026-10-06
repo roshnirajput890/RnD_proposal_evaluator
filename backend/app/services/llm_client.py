@@ -10,16 +10,20 @@ import re
 from typing import Any, Dict, Optional
 import httpx
 
-from app.config import OLLAMA_BASE_URL, LLM_MODEL, REQUEST_TIMEOUT_SECONDS
+from app.config import (
+    OLLAMA_BASE_URL, LLM_MODEL, REQUEST_TIMEOUT_SECONDS,
+    OLLAMA_NUM_CTX, OLLAMA_NUM_PREDICT, OLLAMA_TEMPERATURE, OLLAMA_KEEP_ALIVE
+)
 
 
 class LLMClientError(Exception):
     """Custom exception for Ollama LLM client errors."""
 
-    def __init__(self, message: str, status_code: int = 500):
+    def __init__(self, message: str, status_code: int = 500, error_code: str = "llm_error"):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+        self.error_code = error_code
 
 
 def _clean_json_text(text: str) -> str:
@@ -59,6 +63,8 @@ def call_llm(
     timeout: Optional[float] = None,
     format_json: bool = False,
     max_tokens: Optional[int] = None,
+    num_ctx: Optional[int] = None,
+    temperature: Optional[float] = None,
 ) -> str:
     """
     Calls the local Ollama model via POST /api/generate with stream=false.
@@ -70,6 +76,8 @@ def call_llm(
         timeout: Optional timeout override in seconds (defaults to at least 120s).
         format_json: If True, requests Ollama's structured JSON format mode.
         max_tokens: Optional max tokens to generate (num_predict in Ollama).
+        num_ctx: Optional context window override (defaults to config.OLLAMA_NUM_CTX).
+        temperature: Optional temperature override (defaults to config.OLLAMA_TEMPERATURE).
 
     Returns:
         str: Raw text response from the model.
@@ -87,14 +95,15 @@ def call_llm(
         "prompt": user_prompt,
         "system": system_prompt,
         "stream": False,
+        "keep_alive": OLLAMA_KEEP_ALIVE,
         "options": {
-            "temperature": 0.1,
+            "temperature": temperature if temperature is not None else OLLAMA_TEMPERATURE,
+            "num_ctx": num_ctx if num_ctx is not None else OLLAMA_NUM_CTX,
+            "num_predict": max_tokens if max_tokens is not None else OLLAMA_NUM_PREDICT,
         },
     }
     if format_json:
         payload["format"] = "json"
-    if max_tokens is not None:
-        payload["options"]["num_predict"] = max_tokens
 
     try:
         with httpx.Client(timeout=req_timeout) as client:
@@ -104,17 +113,20 @@ def call_llm(
         raise LLMClientError(
             "Local AI model is not running. Start Ollama and try again.",
             status_code=503,
+            error_code="ollama_not_running",
         )
     except (httpx.TimeoutException, httpx.ReadTimeout):
         raise LLMClientError(
             f"Local AI model request timed out after {int(req_timeout)} seconds. "
             "Local models are slower than cloud APIs; verify system resources and model size.",
             status_code=504,
+            error_code="llm_timeout",
         )
     except Exception as err:
         raise LLMClientError(
             f"Unexpected communication error with local AI server: {str(err)}",
             status_code=500,
+            error_code="llm_error",
         )
 
     # Handle Ollama HTTP error responses
@@ -123,12 +135,14 @@ def call_llm(
             f"Model '{target_model}' is not pulled in Ollama. "
             f"Run: `ollama pull {target_model}` and try again.",
             status_code=404,
+            error_code="model_not_found",
         )
 
     if response.status_code != 200:
         raise LLMClientError(
             f"Ollama server returned error ({response.status_code}): {response.text}",
             status_code=response.status_code,
+            error_code="llm_error",
         )
 
     try:
@@ -140,12 +154,14 @@ def call_llm(
         raise LLMClientError(
             f"Failed to decode response from Ollama: {str(parse_err)}",
             status_code=502,
+            error_code="llm_error",
         )
 
     if not raw_content or not raw_content.strip():
         raise LLMClientError(
             "Local AI model returned an empty response. Please try again.",
             status_code=502,
+            error_code="llm_error",
         )
 
     return raw_content.strip()
@@ -157,6 +173,8 @@ def call_llm_json(
     model: Optional[str] = None,
     timeout: Optional[float] = None,
     max_tokens: Optional[int] = None,
+    num_ctx: Optional[int] = None,
+    temperature: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Calls the local Ollama model and enforces valid JSON output.
@@ -165,6 +183,8 @@ def call_llm_json(
 
     Args:
         max_tokens: Optional max tokens to generate (num_predict in Ollama).
+        num_ctx: Optional context window override.
+        temperature: Optional temperature override.
 
     Returns:
         dict: Parsed JSON object, or a structured error dict if both attempts fail.
@@ -173,8 +193,8 @@ def call_llm_json(
     logger = logging.getLogger(__name__)
     
     json_directive = (
-        "Respond with ONLY valid JSON. No explanation, no markdown code fences, "
-        "no extra text before or after."
+        "Return ONLY one raw JSON object matching the schema. "
+        "No markdown code fences, no extra text before or after."
     )
 
     combined_system_prompt = f"{system_prompt}\n\nIMPORTANT: {json_directive}"
@@ -187,6 +207,8 @@ def call_llm_json(
         timeout=timeout,
         format_json=True,
         max_tokens=max_tokens,
+        num_ctx=num_ctx,
+        temperature=temperature,
     )
 
     cleaned_first = _clean_json_text(first_response)
@@ -219,6 +241,8 @@ def call_llm_json(
             timeout=timeout,
             format_json=True,
             max_tokens=max_tokens,
+            num_ctx=num_ctx,
+            temperature=temperature,
         )
         cleaned_second = _clean_json_text(second_response)
         parsed_json = json.loads(cleaned_second)

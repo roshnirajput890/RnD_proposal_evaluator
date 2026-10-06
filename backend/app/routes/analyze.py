@@ -8,6 +8,7 @@ POST /api/analyze — upload PDF → extract text → run orchestrator pipeline
 
 POST /api/analyze/text — re-analyze already-extracted text (no PDF needed)
 """
+import uuid
 from fastapi import APIRouter, File, UploadFile, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
@@ -69,10 +70,12 @@ async def analyze_proposal_pdf(file: UploadFile = File(None)):
             file_bytes=file_bytes,
         )
 
-        # Step 3: Run full evaluation pipeline
+        # Step 3: Run full evaluation pipeline with progress tracking
+        eval_id = str(uuid.uuid4())
         pipeline_result = run_full_evaluation(
             proposal_text=extraction["full_text"],
             filename=file.filename,
+            evaluation_id=eval_id,
         )
 
         # Step 4: Merge document metadata + scoring into response
@@ -88,6 +91,8 @@ async def analyze_proposal_pdf(file: UploadFile = File(None)):
             "coordinator":       pipeline_result.get("coordinator"),
             "coordinator_error": pipeline_result.get("coordinator_error"),
             "_agent_statuses":   pipeline_result.get("_agent_statuses", {}),
+            "truncation_applied": pipeline_result.get("truncation_applied", False),
+            "evaluation_id":     eval_id,  # Return for potential progress tracking
         }
 
     except PDFProcessingError as pdf_err:
@@ -99,7 +104,10 @@ async def analyze_proposal_pdf(file: UploadFile = File(None)):
     except LLMClientError as llm_err:
         raise HTTPException(
             status_code=llm_err.status_code,
-            detail=llm_err.message,
+            detail={
+                "message": llm_err.message,
+                "error_code": getattr(llm_err, "error_code", "llm_error")
+            }
         ) from llm_err
 
     except HTTPException:
@@ -129,9 +137,11 @@ def analyze_extracted_text(request: TextAnalysisRequest):
         )
 
     try:
+        eval_id = str(uuid.uuid4())
         pipeline_result = run_full_evaluation(
             proposal_text=request.text,
             filename=request.filename or "Proposal Document",
+            evaluation_id=eval_id,
         )
         return {
             "filename":          request.filename,
@@ -140,11 +150,16 @@ def analyze_extracted_text(request: TextAnalysisRequest):
             "coordinator":       pipeline_result.get("coordinator"),
             "coordinator_error": pipeline_result.get("coordinator_error"),
             "_agent_statuses":   pipeline_result.get("_agent_statuses", {}),
+            "truncation_applied": pipeline_result.get("truncation_applied", False),
+            "evaluation_id":     eval_id,
         }
     except LLMClientError as llm_err:
         raise HTTPException(
             status_code=llm_err.status_code,
-            detail=llm_err.message,
+            detail={
+                "message": llm_err.message,
+                "error_code": getattr(llm_err, "error_code", "llm_error")
+            }
         ) from llm_err
     except Exception as err:
         raise HTTPException(

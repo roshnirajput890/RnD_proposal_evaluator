@@ -1,0 +1,13 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "issue": "Parallel mode ignores per-agent timeout parameter",
+      "description": "The _run_agents_parallel function wraps each agent in asyncio.wait_for(..., timeout=AGENT_TIMEOUT_SECONDS), but the inner _run_agent_safe call receives the legacy timeout parameter (which defaults to REQUEST_TIMEOUT_SECONDS=180) and never uses it for agent-level gating. This creates a dead parameter in the signature. If AGENT_TIMEOUT_SECONDS and REQUEST_TIMEOUT_SECONDS diverge, the behavior becomes unclear. Remove the timeout parameter from _run_agent_safe signature or document that it's unused in the current implementation.",
+      "severity": "MEDIUM",
+      "file": "backend/app/services/orchestrator.py",
+      "action": "Remove the unused timeout parameter from _run_agent_safe function signature, or add a comment documenting that agent-level timeout is enforced by the asyncio.wait_for wrapper in parallel mode, not by this parameter."
+    }
+  ],
+  "reviewDoc": "d:\\Projects\\R&D_analyzer\\.agents\\tasks\\perf_review.md"
+}

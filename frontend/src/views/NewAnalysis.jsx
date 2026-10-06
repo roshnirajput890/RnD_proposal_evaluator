@@ -452,6 +452,11 @@ function ReviewerPanel({ savedId, existingReview }) {
   )
 }
 
+// ── Timeout configuration ────────────────────────────────────────────────────────
+// REQUEST_TIMEOUT_MS must exceed: (4 agents × AGENT_TIMEOUT_SECONDS) + coordinator time
+// With AGENT_TIMEOUT_SECONDS=180: 4 × 180 + ~200 = 920s. Use 1,500s (25 min) as safe limit.
+const REQUEST_TIMEOUT_MS = 1500000  // 25 minutes (1,500,000 ms)
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
@@ -466,6 +471,8 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
   const [showRawText,    setShowRawText]    = useState(false)
   const [isDemoResult,   setIsDemoResult]   = useState(false)
   const [demoLoading,    setDemoLoading]    = useState(false)
+  const [progressInfo,   setProgressInfo]   = useState(null)
+  const [evalId,         setEvalId]         = useState(null)
   const fileInputRef = useRef(null)
 
   const fmtSize = b => {
@@ -502,7 +509,7 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
   const reset = () => {
     setSelectedFile(null); setAnalysisResult(null); setSavedId(null)
     setAnalyzeError(''); setIsOllamaError(false); setShowRawText(false)
-    setIsDemoResult(false)
+    setIsDemoResult(false); setProgressInfo(null); setEvalId(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -511,8 +518,14 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
     const l = msg.toLowerCase()
     return l.includes('not running') || l.includes('start ollama') ||
            l.includes('connection refused') || l.includes('ollama') ||
-           l.includes('not pulled') || l.includes('timed out') ||
+           l.includes('not pulled') || 
            l.includes('local ai model')
+  }
+  
+  // Format agent name for display
+  const formatAgentName = (name) => {
+    if (!name) return ''
+    return name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
   }
 
   const handleLoadDemo = async (demoId) => {
@@ -546,14 +559,16 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
     if (!selectedFile) { setAnalyzeError('No file selected.'); return }
     setIsAnalyzing(true); setAnalyzeError(''); setIsOllamaError(false)
     setAnalysisResult(null); setSavedId(null); setAnalysisPhase('extracting')
+    setProgressInfo(null); setEvalId(null)
 
     const form = new FormData(); form.append('file', selectedFile)
     const phaseTimer = setTimeout(() => setAnalysisPhase('analyzing'), 1000)
+    let pollInterval = null
 
     try {
-      // Fetch with 500s timeout to allow LLM processing up to ~450s (backend default 180s + buffer)
+      // Fetch with generous timeout to allow LLM processing (4 agents + coordinator)
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 500000) // 500 seconds
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
       
       const res  = await fetch(`${API_BASE_URL}/api/analyze`, { 
         method: 'POST', 
@@ -564,8 +579,38 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
       
       const data = await res.json()
       if (!res.ok) {
-        const msg = data?.detail || `Server error ${res.status}`
-        setIsOllamaError(isOllamaMsg(msg)); setAnalyzeError(msg); return
+        // Extract error code from detail
+        const errorCode = data?.error_code || (typeof data?.detail === 'object' ? data.detail.error_code : null)
+        const msg = typeof data?.detail === 'string' ? data.detail : data?.detail?.message || `Server error ${res.status}`
+        
+        // Handle different error codes
+        if (errorCode === 'ollama_not_running' || errorCode === 'model_not_found') {
+          setIsOllamaError(true)
+        } else if (errorCode === 'agent_timeout') {
+          setAnalyzeError('The model is slow on this machine. Try a shorter document or the sample demos.')
+          setIsOllamaError(false)
+          return
+        } else {
+          setIsOllamaError(isOllamaMsg(msg))
+        }
+        setAnalyzeError(msg)
+        return
+      }
+
+      // Start progress polling if we have an evaluation ID
+      if (data.evaluation_id) {
+        setEvalId(data.evaluation_id)
+        pollInterval = setInterval(async () => {
+          try {
+            const progRes = await fetch(`${API_BASE_URL}/api/evaluations/${data.evaluation_id}/progress`)
+            if (progRes.ok) {
+              const progData = await progRes.json()
+              setProgressInfo(progData)
+            }
+          } catch {
+            // Ignore errors (analysis may have completed)
+          }
+        }, 2000)
       }
 
       setAnalysisPhase('saving')
@@ -601,11 +646,16 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
       setAnalysisResult(data)
     } catch (err) {
       const msg = err.name === 'AbortError' 
-        ? 'Analysis request timed out after 500 seconds. The local LLM may be too slow or not responding.'
+        ? 'The analysis took longer than expected and was stopped. The local model is slow on this machine. Try a shorter document or one of the sample demos.'
         : (err.message || 'Unexpected error.')
       setIsOllamaError(isOllamaMsg(msg)); setAnalyzeError(msg)
     } finally {
-      clearTimeout(phaseTimer); setIsAnalyzing(false); setAnalysisPhase('')
+      clearTimeout(phaseTimer)
+      if (pollInterval) clearInterval(pollInterval)
+      setIsAnalyzing(false)
+      setAnalysisPhase('')
+      setProgressInfo(null)
+      setEvalId(null)
     }
   }
 
@@ -624,7 +674,15 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
   const loadingMsg = () => {
     if (analysisPhase === 'extracting') return { h: 'Extracting text from PDF',      s: 'reading pages in-memory · PyMuPDF' }
     if (analysisPhase === 'saving')     return { h: 'Saving to database',             s: 'persisting scores + coordinator to SQLite' }
-    return                                     { h: 'Running local model inference', s: 'general analysis + scoring + coordinator · please wait' }
+    
+    // Show progress if available
+    if (progressInfo) {
+      const agentName = formatAgentName(progressInfo.current_agent)
+      const progress = `${agentName} (${progressInfo.completed}/${progressInfo.total})`
+      return { h: 'Running local model inference', s: progress }
+    }
+    
+    return { h: 'Running local model inference', s: 'general analysis + scoring + coordinator · please wait' }
   }
 
   return (
@@ -818,6 +876,22 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
               </div>
             )}
           </div>
+
+          {/* Truncation notice */}
+          {analysisResult.truncation_applied && (
+            <div style={{
+              background: '#fef3c7',
+              border: '1px solid #f59e0b',
+              color: '#92400e',
+              padding: '12px 16px',
+              borderRadius: '6px',
+              marginBottom: '16px',
+              fontSize: '0.875rem',
+              lineHeight: '1.5'
+            }} role="alert">
+              <strong>⚠️ Performance optimization applied:</strong> Input text was shortened for some agents to improve performance. Results are based on relevant sections only.
+            </div>
+          )}
 
           {/* Score breakdown panel — above coordinator */}
           <ScoreBreakdown scoring={scoring} />

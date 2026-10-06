@@ -15,6 +15,12 @@ Rules encoded in the system prompt:
   • Novelty has no external literature evidence in this version.
   • If any agent failed, confidence is ≤ Medium.
   • The recommendation is advisory; human reviewer decides.
+  • Return ONLY one raw JSON object with no markdown or extra text.
+
+Coordinator-specific Ollama options:
+  • Uses larger num_ctx (8192) to fit combined agent outputs.
+  • Uses larger num_predict (1200) for longer JSON response.
+  • Uses lower temperature (0.1) for deterministic output.
 """
 import json
 import logging
@@ -22,6 +28,7 @@ import time
 from typing import Any, Dict, Optional
 
 from app.services.llm_client import call_llm_json
+from app.config import COORDINATOR_NUM_CTX, COORDINATOR_NUM_PREDICT, COORDINATOR_TEMPERATURE
 
 logger = logging.getLogger(__name__)
 
@@ -36,37 +43,32 @@ You are the Coordinator Agent in an R&D proposal evaluation pipeline.
 
 Your role is SYNTHESIS, not new analysis and not numeric scoring.
 You receive:
-  (a) the structured JSON outputs of specialist agents, and
+  (a) the structured outputs of specialist agents (summary, top 3 findings each), and
   (b) the PYTHON-COMPUTED overall score and score_band — these are calculated
       by deterministic weighted-average logic, NOT by you.
 
 STRICT RULES:
 1. You have NOT seen the original proposal text. Work only from what you receive.
-2. Every key_strength MUST name the agent that produced it (supported_by_agent).
-3. Every key_risk MUST name the agent that flagged it (supported_by_agent).
-4. Do NOT invent facts.  If something is not in the agent results, say so.
-5. If any agent has status "failed" or "error", state the evaluation is INCOMPLETE
-   and set coordinator_confidence to "Low".
-6. preliminary_recommendation MUST be exactly equal to the score_band you are given.
-   Do not change it. Your job is to EXPLAIN it, not override it.
-7. Novelty in this version has NO external literature verification.
-   State this limitation when discussing novelty.
-8. If agents contradict each other, list the tension in conflicts_or_tensions.
-9. List concrete, answerable questions in questions_for_human_reviewer.
-10. The recommendation is ADVISORY only.  A human reviewer decides.
+2. Every key strength MUST name the agent that produced it.
+3. Every key risk MUST name the agent that flagged it and include severity (High|Medium|Low).
+4. Do NOT invent facts. If something is not in the agent results, say so.
+5. If any agent has status "failed" or "error", set coordinator_confidence to "Low".
+6. preliminary_recommendation MUST be exactly the score_band provided.
+7. Novelty in this version has NO external literature verification. State this limitation.
+8. Keep all text fields SHORT (1-2 sentences for summaries, 1 sentence for points).
+9. The recommendation is ADVISORY only. A human reviewer decides.
 
-RESPONSE FORMAT — ONLY a valid JSON object, no markdown, no extra text:
+RESPONSE FORMAT — Return ONLY a valid JSON object with these fields and no markdown:
 
 {
-  "overall_summary": "2-4 sentence synthesis.",
-  "key_strengths": [{"point": "...", "supported_by_agent": "agent_name"}],
-  "key_risks": [{"point": "...", "severity": "High|Medium|Low", "supported_by_agent": "agent_name"}],
-  "conflicts_or_tensions": [{"description": "...", "between_agents": ["a", "b"]}],
-  "critical_missing_information": ["..."],
-  "questions_for_human_reviewer": ["..."],
-  "preliminary_recommendation": "<must equal the score_band you received>",
-  "recommendation_reasoning": "One paragraph explaining why this band was reached.",
-  "coordinator_confidence": "High|Medium|Low"
+  "overall_summary": "1-2 sentence synthesis",
+  "key_strengths": [{"point": "1 sentence", "agent": "agent_name", "severity": "N/A"}],
+  "key_risks": [{"point": "1 sentence", "agent": "agent_name", "severity": "High|Medium|Low"}],
+  "critical_missing": ["item"],
+  "questions": ["question"],
+  "preliminary_recommendation": "same as score_band",
+  "reasoning": "1-2 sentences explaining score_band",
+  "confidence": "High|Medium|Low"
 }
 """
 
@@ -74,40 +76,33 @@ RESPONSE FORMAT — ONLY a valid JSON object, no markdown, no extra text:
 def _extract_essential_fields(agent_name: str, result: Dict[str, Any]) -> Dict[str, Any]:
     """
     Extract only essential fields from agent results to reduce coordinator prompt size.
-    Keeps: summary/justification fields, scores, key findings. Drops full details.
+    Keeps: score, summary, and top 3 findings (point + severity).
+    Drops: detailed analysis, full evidence, internal fields.
     """
-    essential = {"_status": result.get("_status", "completed")}
+    essential = {"_status": result.get("_status", "completed"), "agent": agent_name}
     
-    if agent_name == "novelty_agent":
-        # Keep score, justification, key findings
-        essential.update({
-            "score": result.get("score"),
-            "score_justification": result.get("score_justification"),
-            "claimed_innovation": result.get("claimed_innovation"),
-            "external_evidence_used": result.get("external_evidence_used"),
-            "novelty_confidence_note": result.get("novelty_confidence_note"),
-            "retrieved_paper_count": result.get("retrieved_paper_count"),
-        })
-        # Keep only top 2 closest papers, not all
-        closest = result.get("closest_papers", [])
-        if closest:
-            essential["closest_papers"] = closest[:2]
+    # All agents: score and summary
+    if "score" in result:
+        essential["score"] = result["score"]
+    if "score_justification" in result:
+        essential["summary"] = result["score_justification"]
+    elif "summary" in result:
+        essential["summary"] = result["summary"]
     
-    elif agent_name == "general_analysis":
-        # Keep summary, title, category, key findings
-        essential.update({
-            "title_or_topic": result.get("title_or_topic"),
-            "category": result.get("category"),
-            "summary": result.get("summary"),
-            "key_findings": result.get("key_findings"),
-        })
+    # Top 3 findings: point + severity (if available)
+    findings = []
+    if "findings" in result and isinstance(result["findings"], list):
+        for finding in result["findings"][:3]:
+            if isinstance(finding, dict):
+                point_item = {
+                    "point": finding.get("point", ""),
+                }
+                if "severity" in finding:
+                    point_item["severity"] = finding["severity"]
+                findings.append(point_item)
     
-    else:
-        # For other agents, keep non-internal fields but drop large blobs
-        essential.update({
-            k: v for k, v in result.items()
-            if not k.startswith("_") and not isinstance(v, (list, dict)) or k in ("key_findings", "summary")
-        })
+    if findings:
+        essential["top_findings"] = findings
     
     return essential
 
@@ -181,25 +176,53 @@ def run_coordinator(
             user_prompt=user_prompt,
             model=model,
             timeout=timeout,
+            max_tokens=COORDINATOR_NUM_PREDICT,
+            num_ctx=COORDINATOR_NUM_CTX,
+            temperature=COORDINATOR_TEMPERATURE,
         )
-        logger.info("TIMING [coordinator] done: %.1fs", time.perf_counter() - _t0)
+        elapsed = time.perf_counter() - _t0
+        logger.info("TIMING [coordinator] done: %.1fs", elapsed)
+        
+        # Log done_reason and raw response if available
+        if "done_reason" in result:
+            logger.info("Ollama done_reason: %s", result["done_reason"])
+        if result.get("error"):
+            logger.error("Coordinator JSON parse failed. Raw response (first 500 chars): %s",
+                        result.get("raw_response", "N/A")[:500])
     except Exception as exc:
-        # Log the raw response text if available to debug JSON parse failures
-        if hasattr(exc, 'raw_response'):
-            logger.error(
-                "Coordinator LLM call failed with exception. Raw response (first 1000 chars):\n%s",
-                str(exc.raw_response)[:1000]
-            )
         logger.error("Coordinator LLM call failed: %s", exc)
-        raise
+        # Return fallback instead of raising
+        return _build_fallback_coordinator(scores, any_failed)
 
+    # If JSON parsing failed, build fallback from scores
     if "error" in result and "overall_summary" not in result:
-        return {
-            "coordinator_error": result.get("error"),
-            "raw_response":      result.get("raw_response"),
-        }
+        logger.warning("Coordinator synthesis failed; building fallback from scores")
+        return _build_fallback_coordinator(scores, any_failed)
 
     return _normalise(result, any_failed, scores)
+
+
+
+
+def _build_fallback_coordinator(scores: Dict[str, Any], any_failed: bool) -> Dict[str, Any]:
+    """
+    Build a deterministic fallback coordinator response when AI synthesis fails.
+    Uses the computed weighted score and recommendation label, plus a marker.
+    """
+    computed_band = scores.get("score_band", "Insufficient Information")
+    
+    return {
+        "overall_summary": f"Automated evaluation summary: {computed_band} (AI synthesis unavailable).",
+        "key_strengths": [],
+        "key_risks": [],
+        "conflicts_or_tensions": [],
+        "critical_missing_information": ["Full coordinator analysis could not be generated."],
+        "questions_for_human_reviewer": ["Review the agent results and scores above."],
+        "preliminary_recommendation": computed_band,
+        "recommendation_reasoning": f"Based on computed score band: {computed_band}. AI synthesis of findings was unavailable.",
+        "coordinator_confidence": "Low" if any_failed else "Medium",
+        "_auto_generated": True,
+    }
 
 
 def _normalise(
