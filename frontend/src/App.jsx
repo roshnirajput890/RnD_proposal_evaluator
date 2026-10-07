@@ -192,9 +192,6 @@ export default function App() {
 
         <footer className="layout-footer">
           <span className="footer-text">R&amp;D Proposal Evaluator</span>
-          <span className="footer-build">
-            {API_BASE_URL} · {llmHealth?.model || '—'} · Brick 6
-          </span>
         </footer>
       </div>
 

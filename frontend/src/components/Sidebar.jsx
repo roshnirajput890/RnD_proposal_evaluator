@@ -87,7 +87,7 @@ export default function Sidebar({ activeView, setActiveView, llmHealth, llmCheck
   const llmLine = () => {
     if (llmChecking) return { text: 'checking…', cls: 'sb-status-warn' }
     if (!llmHealth)  return { text: 'unknown',   cls: 'sb-status-muted' }
-    if (llmHealth.status === 'ok')            return { text: llmHealth.model, cls: 'sb-status-ok' }
+    if (llmHealth.status === 'ok')            return { text: 'Local AI', cls: 'sb-status-ok' }
     if (llmHealth.status === 'model_missing') return { text: 'model missing', cls: 'sb-status-warn' }
     return { text: 'offline', cls: 'sb-status-err' }
   }

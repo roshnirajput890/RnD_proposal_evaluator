@@ -365,14 +365,13 @@ export default function History({
     if (statusFilter !== 'all')
       data = data.filter(r => r.status === statusFilter)
 
-    // Text search — filename, title, model, ID
+    // Text search — filename, title, model
     if (query.trim()) {
       const q = query.toLowerCase()
       data = data.filter(r =>
         (r.filename       || '').toLowerCase().includes(q) ||
         (r.title_or_topic || '').toLowerCase().includes(q) ||
-        (r.model_used     || '').toLowerCase().includes(q) ||
-        (r.id             || '').toLowerCase().includes(q)
+        (r.model_used     || '').toLowerCase().includes(q)
       )
     }
 
@@ -453,7 +452,7 @@ export default function History({
               <input
                 className="toolbar-input"
                 type="search"
-                placeholder="Search filename, title, model, ID…"
+                placeholder="Search filename, title, model…"
                 value={query}
                 onChange={e => setFilters(f => ({ ...f, query: e.target.value }))}
                 aria-label="Search evaluations"
@@ -533,11 +532,6 @@ export default function History({
           <table className="data-table" aria-label="Evaluation history">
             <thead>
               <tr>
-                <th className="col-id">
-                  <button className="th-btn" onClick={() => toggleSort('id')}>
-                    ID <SortIndicator col="id" />
-                  </button>
-                </th>
                 <th className="col-title">
                   <button className="th-btn" onClick={() => toggleSort('title_or_topic')}>
                     Title <SortIndicator col="title_or_topic" />
@@ -546,11 +540,6 @@ export default function History({
                 <th className="col-dept">
                   <button className="th-btn" onClick={() => toggleSort('model_used')}>
                     Model <SortIndicator col="model_used" />
-                  </button>
-                </th>
-                <th className="col-budget">
-                  <button className="th-btn" onClick={() => toggleSort('char_count')}>
-                    Chars <SortIndicator col="char_count" />
                   </button>
                 </th>
                 <th className="col-score">
@@ -577,11 +566,11 @@ export default function History({
 
             <tbody>
               {loading && (
-                <tr><td colSpan="10" className="table-empty">Loading evaluations…</td></tr>
+                <tr><td colSpan="8" className="table-empty">Loading evaluations…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan="10" className="table-empty">
+                  <td colSpan="8" className="table-empty">
                     {rows.length === 0
                       ? 'No evaluations yet. Run an analysis to see results here.'
                       : 'No evaluations match the current filters.'}
@@ -597,9 +586,6 @@ export default function History({
                     style={{ cursor: 'pointer' }}
                     aria-expanded={expandedId === row.id}
                   >
-                    <td>
-                      <span className="mono-id" title={row.id}>{row.id.slice(0, 8)}…</span>
-                    </td>
                     <td className="col-title">
                       <span className="row-title">
                         {row.title_or_topic && 
@@ -611,7 +597,6 @@ export default function History({
                       <span className="row-pi">{row.filename}</span>
                     </td>
                     <td><span className="dept-tag">{row.model_used || '—'}</span></td>
-                    <td><span className="mono-val">{(row.char_count || 0).toLocaleString()}</span></td>
                     <td><RealScoreDisplay value={row.overall_score} /></td>
                     <td><BandPill band={row.score_band} /></td>
                     <td>
@@ -644,13 +629,14 @@ export default function History({
                   {/* Inline expanded detail row */}
                   {expandedId === row.id && (
                     <tr key={`${row.id}-detail`} className="detail-row">
-                      <td colSpan="10">
+                      <td colSpan="8">
                         <div className="detail-panel">
                           <div className="detail-grid">
                             <div className="detail-cell">
-                              <span className="detail-label">Record ID</span>
-                              <span className="detail-val mono-val"
-                                style={{ fontSize: '0.72rem' }}>{row.id}</span>
+                              <span className="detail-label">Document length</span>
+                              <span className="detail-val mono-val">
+                                ~{Math.round((row.char_count || 0) / 1000)}k chars
+                              </span>
                             </div>
                             <div className="detail-cell">
                               <span className="detail-label">Pages</span>

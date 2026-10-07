@@ -894,7 +894,6 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
             {[
               { label: 'Pages',     value: analysisResult.page_count },
               { label: 'Characters', value: (analysisResult.char_count||0).toLocaleString() },
-              { label: 'Model',      value: llmHealth?.model || 'local', cls: 'text-sm' },
               { label: 'Persisted',  value: savedId ? savedId.slice(0,8)+'…' : 'not saved',
                 cls: `text-sm${savedId ? '' : ' text-warn'}` },
             ].map(({label, value, cls}) => (
@@ -909,6 +908,12 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
                 <span className="metric-value text-warn">Key sections selected (~3,000 chars per agent)</span>
               </div>
             )}
+            <div className="metric-card" role="listitem">
+              <span className="metric-label">Model</span>
+              <span className="metric-value" style={{ fontSize: '0.75rem', color: 'var(--ink-3)' }}>
+                {llmHealth?.model || 'local'}
+              </span>
+            </div>
           </div>
 
           {/* Truncation notice */}
