@@ -71,6 +71,9 @@ const NAV_ITEMS = [
   { id: 'analysis',  label: 'New Analysis',       Icon: IconAnalysis  },
   { id: 'history',   label: 'History & Archive',  Icon: IconHistory   },
   { id: 'analytics', label: 'Portfolio Analytics',Icon: IconAnalytics },
+]
+
+const ADVANCED_ITEMS = [
   { id: 'settings',  label: 'AI Engine Settings', Icon: IconSettings  },
 ]
 
@@ -78,6 +81,7 @@ const NAV_ITEMS = [
 
 export default function Sidebar({ activeView, setActiveView, llmHealth, llmChecking, backendStatus }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [advancedExpanded, setAdvancedExpanded] = useState(false)
 
   // LLM widget state string
   const llmLine = () => {
@@ -144,6 +148,61 @@ export default function Sidebar({ activeView, setActiveView, llmHealth, llmCheck
           </li>
         ))}
       </ul>
+
+      {/* ── Advanced section (collapsible) ── */}
+      {!collapsed && (
+        <>
+          <button
+            className="sb-section-label sb-section-label--collapsible"
+            onClick={() => setAdvancedExpanded(e => !e)}
+            aria-expanded={advancedExpanded}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              padding: '8px 16px',
+              marginTop: '8px',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--ink-3)',
+              fontSize: '0.7rem',
+              fontWeight: '600',
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              transition: 'color 0.15s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--ink-2)'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--ink-3)'}
+          >
+            <span>Advanced</span>
+            <span style={{ transform: advancedExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>
+              <IconCollapse collapsed={!advancedExpanded} />
+            </span>
+          </button>
+          
+          {advancedExpanded && (
+            <ul className="sb-nav" role="list" style={{ marginTop: '4px' }}>
+              {ADVANCED_ITEMS.map(({ id, label, Icon }) => (
+                <li key={id} role="listitem">
+                  <button
+                    className={`sb-nav-item${activeView === id ? ' sb-nav-item--active' : ''}`}
+                    onClick={() => setActiveView(id)}
+                    aria-current={activeView === id ? 'page' : undefined}
+                  >
+                    <span className="sb-nav-icon"><Icon /></span>
+                    <span className="sb-nav-label">{label}</span>
+                    {activeView === id && (
+                      <span className="sb-nav-active-bar" aria-hidden="true" />
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
 
       {/* ── Bottom status widget ── */}
       <div className="sb-bottom">

@@ -688,6 +688,28 @@ export default function History({
 
                             if (!coord) return null
 
+                            // Helper to clean agent names
+                            const cleanAgentName = (text) => {
+                              if (!text) return text
+                              return text
+                                .replace(/novelty_agent/gi, 'Novelty')
+                                .replace(/technical_agent/gi, 'Technical')
+                                .replace(/financial_agent/gi, 'Financial')
+                                .replace(/impact_agent/gi, 'Impact')
+                            }
+
+                            // Filter out score-only strengths
+                            const filterScoreOnlyStrengths = (strengths) => {
+                              if (!strengths || !Array.isArray(strengths)) return []
+                              return strengths.filter(s => {
+                                const point = s.point || ''
+                                const isScoreOnly = /^\s*(?:identified|scored|rated|received|achieved|has)\s+(?:a|an)?\s*\d+[-/]?\d*\s*(?:point|score|rating)/i.test(point)
+                                return !isScoreOnly
+                              })
+                            }
+
+                            const filteredStrengths = filterScoreOnlyStrengths(coord.key_strengths)
+
                             const recConf = {
                               'Recommend':                { dot: 'dot-connected',    label: 'Recommend' },
                               'Revise and Resubmit':      { dot: 'dot-checking',     label: 'Revise and Resubmit' },
@@ -714,30 +736,34 @@ export default function History({
                                 {coord.overall_summary && (
                                   <div className="detail-summary" style={{ marginBottom: '8px' }}>
                                     <span className="detail-label">Summary</span>
-                                    <p className="detail-summary-text">{coord.overall_summary}</p>
+                                    <p className="detail-summary-text">{cleanAgentName(coord.overall_summary)}</p>
                                   </div>
                                 )}
 
                                 {coord.recommendation_reasoning && (
                                   <div className="detail-summary" style={{ marginBottom: '8px' }}>
                                     <span className="detail-label">Reasoning</span>
-                                    <p className="detail-summary-text">{coord.recommendation_reasoning}</p>
+                                    <p className="detail-summary-text">{cleanAgentName(coord.recommendation_reasoning)}</p>
                                   </div>
                                 )}
 
-                                {coord.key_strengths?.length > 0 && (
-                                  <div className="detail-summary" style={{ marginBottom: '8px' }}>
-                                    <span className="detail-label">Key strengths</span>
+                                <div className="detail-summary" style={{ marginBottom: '8px' }}>
+                                  <span className="detail-label">Key strengths</span>
+                                  {filteredStrengths.length > 0 ? (
                                     <ul className="coord-list" style={{ marginTop: '4px' }}>
-                                      {coord.key_strengths.map((s, i) => (
+                                      {filteredStrengths.map((s, i) => (
                                         <li key={i} className="coord-list-item">
-                                          <span className="coord-item-text">{s.point}</span>
-                                          <span className="coord-agent-tag">{s.supported_by_agent}</span>
+                                          <span className="coord-item-text">{cleanAgentName(s.point)}</span>
+                                          <span className="coord-agent-tag">{cleanAgentName(s.supported_by_agent)}</span>
                                         </li>
                                       ))}
                                     </ul>
-                                  </div>
-                                )}
+                                  ) : (
+                                    <p className="detail-summary-text" style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>
+                                      No clear strengths extracted
+                                    </p>
+                                  )}
+                                </div>
 
                                 {coord.key_risks?.length > 0 && (
                                   <div className="detail-summary" style={{ marginBottom: '8px' }}>
@@ -748,8 +774,8 @@ export default function History({
                                           <span className="coord-severity-tag" data-sev={r.severity?.toLowerCase()}>
                                             {r.severity}
                                           </span>
-                                          <span className="coord-item-text">{r.point}</span>
-                                          <span className="coord-agent-tag">{r.supported_by_agent}</span>
+                                          <span className="coord-item-text">{cleanAgentName(r.point)}</span>
+                                          <span className="coord-agent-tag">{cleanAgentName(r.supported_by_agent)}</span>
                                         </li>
                                       ))}
                                     </ul>
@@ -762,7 +788,7 @@ export default function History({
                                     <ul className="coord-list" style={{ marginTop: '4px' }}>
                                       {coord.questions_for_human_reviewer.map((q, i) => (
                                         <li key={i} className="coord-list-item">
-                                          <span className="coord-item-text">{q}</span>
+                                          <span className="coord-item-text">{cleanAgentName(q)}</span>
                                         </li>
                                       ))}
                                     </ul>

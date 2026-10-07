@@ -222,7 +222,8 @@ _ALL_COLS = """
     overall_score, score_band,
     reviewer_overrides, reviewer_final_decision, reviewer_notes,
     reviewer_updated_at,
-    novelty_search_queries, retrieved_papers, external_evidence_used
+    novelty_search_queries, retrieved_papers, external_evidence_used,
+    is_demo
 """
 
 
@@ -256,6 +257,7 @@ def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
                 pass
 
     d["truncated"] = bool(d.get("truncated", 0))
+    d["is_demo"] = bool(d.get("is_demo", 0))
 
     # Convert external_evidence_used integer → bool (None stays None)
     eeu = d.get("external_evidence_used")

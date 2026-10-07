@@ -190,8 +190,31 @@ function CoordinatorPanel({ coordinator, coordinatorError, novelty }) {
   // Determine novelty disclaimer based on whether external papers were used
   const hasExternalEvidence = novelty?.external_evidence_used === true && novelty?.score != null
   const noveltyDisclaimer = hasExternalEvidence
-    ? "Novelty assessment uses a limited automated search (OpenAlex, top 3 papers). It is not an exhaustive literature review."
-    : "Novelty assessment has no external literature evidence in this version."
+    ? " Novelty assessment uses a limited automated search (OpenAlex, top 3 papers). It is not an exhaustive literature review."
+    : " Novelty assessment has no external literature evidence in this version."
+
+  // Helper to clean agent names in user-visible text
+  const cleanAgentName = (text) => {
+    if (!text) return text
+    return text
+      .replace(/novelty_agent/gi, 'Novelty')
+      .replace(/technical_agent/gi, 'Technical')
+      .replace(/financial_agent/gi, 'Financial')
+      .replace(/impact_agent/gi, 'Impact')
+  }
+
+  // Filter out strengths that only describe scores
+  const filterScoreOnlyStrengths = (strengths) => {
+    if (!strengths || !Array.isArray(strengths)) return []
+    return strengths.filter(s => {
+      const point = s.point || ''
+      // Filter out generic score descriptions
+      const isScoreOnly = /^\s*(?:identified|scored|rated|received|achieved|has)\s+(?:a|an)?\s*\d+[-/]?\d*\s*(?:point|score|rating)/i.test(point)
+      return !isScoreOnly
+    })
+  }
+
+  const filteredStrengths = filterScoreOnlyStrengths(coordinator.key_strengths)
 
   return (
     <div className="analysis-section coord-section">
@@ -223,26 +246,30 @@ function CoordinatorPanel({ coordinator, coordinatorError, novelty }) {
         <div className="analysis-cards">
           <div className="analysis-card">
             <div className="analysis-card-label"><span className="card-index">C1</span>Overall Summary</div>
-            <p className="analysis-card-text">{coordinator.overall_summary || '—'}</p>
+            <p className="analysis-card-text">{cleanAgentName(coordinator.overall_summary) || '—'}</p>
           </div>
           <div className="analysis-card">
             <div className="analysis-card-label"><span className="card-index">C2</span>Recommendation · Reasoning</div>
-            <p className="analysis-card-text">{coordinator.recommendation_reasoning || '—'}</p>
+            <p className="analysis-card-text">{cleanAgentName(coordinator.recommendation_reasoning) || '—'}</p>
           </div>
 
-          {coordinator.key_strengths?.length > 0 && (
-            <div className="analysis-card">
-              <div className="analysis-card-label"><span className="card-index">C3</span>Key Strengths</div>
+          <div className="analysis-card">
+            <div className="analysis-card-label"><span className="card-index">C3</span>Key Strengths</div>
+            {filteredStrengths.length > 0 ? (
               <ul className="coord-list">
-                {coordinator.key_strengths.map((s, i) => (
+                {filteredStrengths.map((s, i) => (
                   <li key={i} className="coord-list-item">
-                    <span className="coord-item-text">{s.point}</span>
-                    <span className="coord-agent-tag">{s.supported_by_agent}</span>
+                    <span className="coord-item-text">{cleanAgentName(s.point)}</span>
+                    <span className="coord-agent-tag">{cleanAgentName(s.supported_by_agent)}</span>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
+            ) : (
+              <p className="analysis-card-text" style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>
+                No clear strengths extracted
+              </p>
+            )}
+          </div>
 
           {coordinator.key_risks?.length > 0 && (
             <div className="analysis-card">
@@ -251,8 +278,8 @@ function CoordinatorPanel({ coordinator, coordinatorError, novelty }) {
                 {coordinator.key_risks.map((r, i) => (
                   <li key={i} className="coord-list-item">
                     <span className="coord-severity-tag" data-sev={r.severity?.toLowerCase()}>{r.severity}</span>
-                    <span className="coord-item-text">{r.point}</span>
-                    <span className="coord-agent-tag">{r.supported_by_agent}</span>
+                    <span className="coord-item-text">{cleanAgentName(r.point)}</span>
+                    <span className="coord-agent-tag">{cleanAgentName(r.supported_by_agent)}</span>
                   </li>
                 ))}
               </ul>
@@ -879,7 +906,7 @@ export default function NewAnalysis({ llmHealth, onAnalysisComplete }) {
             {analysis.truncated && (
               <div className="metric-card warning-metric" role="listitem">
                 <span className="metric-label">Input</span>
-                <span className="metric-value text-warn">truncated — first 40 k chars</span>
+                <span className="metric-value text-warn">Key sections selected (~3,000 chars per agent)</span>
               </div>
             )}
           </div>
