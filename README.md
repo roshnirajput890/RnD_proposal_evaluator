@@ -275,7 +275,3 @@ Proposals may be confidential. Analysis uses a **local LLM**, uploaded PDFs are 
 - GPU or hosted-model option for much faster runs
 - User accounts and multi-reviewer workflows
 - Richer novelty search across more scholarly sources
-
-## Team
-Roshni Rajput (mob no. 7498072344)
-Vaibhavi Deshpande
